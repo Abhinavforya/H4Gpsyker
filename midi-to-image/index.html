@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MIDI → ASCII Art | Music Visualizer</title>
+  <meta name="description"
+    content="Convert MIDI files into stunning generative art using p5.js. Upload a MIDI file and watch your music transform into visual masterpieces." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap"
+    rel="stylesheet" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  <link rel="stylesheet" href="/midi-to-image/style.css" />
+</head>
+
+<body>
+  <div class="bg-orbs">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <header>
+    <div class="logo">
+      <span class="logo-icon">♫</span>
+      <span>MIDI<span class="accent">→</span>IMG</span>
+    </div>
+    <nav>
+      <a href="#upload" class="nav-link">Upload</a>
+      <a href="#canvas-wrap" class="nav-link">Canvas</a>
+      <a href="#controls" class="nav-link">Controls</a>
+      <a href="https://spotifybackend-theta.vercel.app/api/login?next=/midi-to-image/index.html" class="spotify-btn" id="spotifyAuthBtn" title="Connect to Spotify">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+          <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15.6 10.561 19.021 12.84c.361.21.601.541.301.961zm.12-3.36C15.312 8.887 8.59 8.75 5.16 9.771c-.589.15-1.159-.355-1.309-.945-.15-.589.355-1.159.945-1.309 3.59-.981 10.28-.824 14.514 2.101.479.355.601 1.08.246 1.559-.355.479-1.08.599-1.559.245z"/>
+        </svg>
+        Connect Spotify
+      </a>
+    </nav>
+    <!-- Spotify Profile (hidden by default) -->
+    <div class="spotify-profile-icon" id="spotifyProfileIcon" style="display: none;">
+      <img id="userProfileImg" src="" alt="Profile" class="profile-pic">
+      <button id="logoutBtn" class="logout-btn" title="Logout">✕</button>
+    </div>
+  </header>
+
+  <!-- Spotify Home Page -->
+  <div class="spotify-home" id="spotifyHome" style="display: none;">
+    <main>
+      <section class="spotify-welcome-section">
+        <div class="spotify-welcome-header">
+          <div class="spotify-welcome-text">
+            <h1>Welcome to your <span class="spotify-accent">Music Hub</span></h1>
+            <p id="userGreeting"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Glassmorphism Container for Playlists -->
+      <section class="spotify-glass-container">
+        <div class="spotify-glass-header">
+          <h2>📚 Your Playlists</h2>
+          <span class="spotify-glass-count" id="playlistCount">0</span>
+        </div>
+        <div class="spotify-playlists-grid" id="playlistsContainer">
+          <div class="skeleton-loader"></div>
+          <div class="skeleton-loader"></div>
+          <div class="skeleton-loader"></div>
+        </div>
+      </section>
+
+      <!-- Glassmorphism Container for Recently Played Songs -->
+      <section class="spotify-glass-container">
+        <div class="spotify-glass-header">
+          <h2>🎵 Recently Played Songs</h2>
+          <span class="spotify-glass-count" id="songsCount">0</span>
+        </div>
+        <div class="spotify-songs-grid" id="songsContainer">
+          <div class="skeleton-loader"></div>
+          <div class="skeleton-loader"></div>
+          <div class="skeleton-loader"></div>
+        </div>
+      </section>
+
+      <!-- Glassmorphism Container for Recently Played Artists -->
+      <section class="spotify-glass-container">
+        <div class="spotify-glass-header">
+          <h2>🎤 Recently Played Artists</h2>
+          <span class="spotify-glass-count" id="artistCount">0</span>
+        </div>
+        <div class="spotify-artists-grid" id="artistsContainer">
+          <div class="skeleton-loader"></div>
+          <div class="skeleton-loader"></div>
+          <div class="skeleton-loader"></div>
+        </div>
+      </section>
+
+      <!-- Playlist Songs Modal -->
+      <div class="playlist-modal" id="playlistModal" style="display: none;">
+        <div class="playlist-modal-content">
+          <div class="playlist-modal-header">
+            <h2 id="playlistModalTitle">Playlist Songs</h2>
+            <button class="modal-close-btn" id="closePlaylistModalBtn">✕</button>
+          </div>
+          <div class="playlist-modal-controls">
+            <input type="text" id="songSearchInput" placeholder="Search songs..." class="song-search-input">
+            <button id="selectAllSongsBtn" class="btn-secondary">Select All</button>
+            <button id="deselectAllSongsBtn" class="btn-secondary">Deselect All</button>
+          </div>
+          <div class="playlist-songs-container" id="playlistSongsContainer">
+            <div class="skeleton-loader"></div>
+            <div class="skeleton-loader"></div>
+            <div class="skeleton-loader"></div>
+          </div>
+          <div class="playlist-modal-footer">
+            <button id="convertSelectedSongsBtn" class="btn-primary">🎨 Convert Selected Songs to ASCII Art</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="spotify-back-button">
+        <button id="backToAppBtn" class="btn-secondary">← Back to MIDI Converter</button>
+      </div>
+    </main>
+  </div>
+
+  <main id="mainContent">
+    <section class="hero">
+      <h1>Turn Music Into <span class="gradient-text">ASCII Art</span></h1>
+      <p class="hero-sub">Upload an MP3, WAV, OGG, or MIDI file — we convert the pitch data into a live ASCII art visualisation and a p5.js generative canvas</p>
+    </section>
+
+    <!-- Upload Zone -->
+    <section id="upload" class="upload-section">
+      <div class="upload-zone" id="dropZone">
+        <div class="upload-icon">🎵</div>
+        <h2>Drop your MP3 or MIDI file here</h2>
+        <p>Supports MP3, WAV, OGG → auto-converts to MIDI → ASCII Art</p>
+        <input type="file" id="midiFile" accept=".mid,.midi,.mp3,.wav,.ogg" hidden />
+        <button class="btn-upload" onclick="document.getElementById('midiFile').click()">Choose Audio / MIDI File</button>
+        <div class="file-info" id="fileInfo"></div>
+        <div class="progress-bar" id="progressBar" style="display:none">
+          <div class="progress-fill" id="progressFill"></div>
+          <span class="progress-label" id="progressLabel">Analysing audio…</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Controls -->
+    <section id="controls" class="controls-section hidden">
+      <h2 class="section-title">Visual Controls</h2>
+
+      <div class="controls-grid">
+
+        <div class="control-card">
+          <label for="visualMode">Render Mode</label>
+          <select id="visualMode">
+            <option value="particles">Particle Burst</option>
+            <option value="waves">Wave Spectrum</option>
+            <option value="mandala">Mandala</option>
+            <option value="constellation">Constellation</option>
+            <option value="piano-roll">Piano Roll Paint</option>
+            <option value="spiral">Spiral Galaxy</option>
+            <option value="kaleidoscope">Kaleidoscope</option>
+            <option value="tree">Tree Branches</option>
+          </select>
+        </div>
+
+        <div class="control-card">
+          <label for="colorScheme">Color Scheme</label>
+          <select id="colorScheme">
+            <option value="aurora">Aurora</option>
+            <option value="sunset">Sunset Blaze</option>
+            <option value="ocean">Deep Ocean</option>
+            <option value="neon">Neon Pulse</option>
+            <option value="mono">Monochrome</option>
+          </select>
+        </div>
+
+        <div class="control-card">
+          <label for="bgColor">Background</label>
+          <select id="bgColor">
+            <option value="black">Pure Black</option>
+            <option value="dark">Dark Navy</option>
+            <option value="white">White</option>
+            <option value="deep">Deep Purple</option>
+          </select>
+        </div>
+
+        <div class="control-card">
+          <label for="density">Density <span id="densityVal">50</span>%</label>
+          <input type="range" id="density" min="10" max="100" value="50" />
+        </div>
+
+        <div class="control-card">
+          <label for="speed">Animation Speed <span id="speedVal">5</span></label>
+          <input type="range" id="speed" min="1" max="10" value="5" />
+        </div>
+
+        <div class="control-card">
+          <label for="glow">Glow Intensity <span id="glowVal">50</span>%</label>
+          <input type="range" id="glow" min="0" max="100" value="50" />
+        </div>
+
+      </div>
+      <div class="control-actions">
+        <button class="btn-primary" id="generateBtn">✦ Generate Image</button>
+        <button class="btn-secondary" id="regenBtn">↺ Regenerate</button>
+        <button class="btn-secondary" id="downloadBtn">↓ Save PNG</button>
+        <button class="btn-secondary" id="animateBtn">▶ Animate</button>
+      </div>
+    </section>
+
+    <!-- ASCII Art Output -->
+    <section id="ascii-wrap" class="canvas-section hidden">
+      <h2 class="section-title">ASCII Art Output</h2>
+      <div class="canvas-header">
+        <div style="display:flex;gap:0.6rem;align-items:center">
+          <select id="asciiCharSet" style="background:#1a1a2e;color:#e0e0ff;border:1px solid #444;border-radius:6px;padding:2px 6px;font-size:0.8rem">
+            <option value="classic">Classic</option>
+            <option value="blocks">Blocks</option>
+            <option value="symbols">Symbols</option>
+            <option value="musical">Musical</option>
+            <option value="numbers">Numbers</option>
+            <option value="wave">Wave</option>
+            <option value="grayscale">Grayscale</option>
+            <option value="dots">Dots</option>
+            <option value="braille">Braille</option>
+            <option value="circuit">Circuit</option>
+          </select>
+          <select id="asciiColorTheme" style="background:#1a1a2e;color:#e0e0ff;border:1px solid #444;border-radius:6px;padding:2px 6px;font-size:0.8rem">
+            <option value="matrix">Matrix</option>
+            <option value="amber">Amber</option>
+            <option value="cyan">Cyan</option>
+            <option value="purple">Purple</option>
+            <option value="rainbow">Rainbow</option>
+            <option value="white">White</option>
+            <option value="cyberpunk">Cyberpunk</option>
+            <option value="forest">Forest</option>
+            <option value="twilight">Twilight</option>
+            <option value="sunrise">Sunrise</option>
+            <option value="ocean">Ocean</option>
+            <option value="fire">Fire</option>
+          </select>
+          <button class="btn-secondary" style="padding:4px 12px;font-size:0.8rem" id="asciiRegenBtn">↺ Regen</button>
+          <button class="btn-secondary" style="padding:4px 12px;font-size:0.8rem" id="asciiAnimBtn">▶ Animate</button>
+          <button class="btn-secondary" style="padding:4px 12px;font-size:0.8rem" id="asciiCopyBtn">⎘ Copy</button>
+        </div>
+      </div>
+      <div id="ascii-container"></div>
+      <div class="midi-stats" id="asciiStats"></div>
+    </section>
+
+    <!-- Canvas -->
+    <section id="canvas-wrap" class="canvas-section hidden">
+      <h2 class="section-title">p5.js Canvas</h2>
+      <div class="canvas-header">
+        <span class="canvas-size-label" id="canvasSizeLabel">800 × 600</span>
+      </div>
+      <div id="p5-container"></div>
+      <div class="midi-stats" id="midiStats"></div>
+    </section>
+
+    <!-- Track Panel -->
+    <section class="tracks-section hidden" id="tracksPanel">
+      <h2 class="section-title">MIDI Tracks</h2>
+      <div class="tracks-list" id="tracksList"></div>
+    </section>
+  </main>
+
+  <footer>
+    <p>Built with <span class="accent">p5.js</span> · MIDI parsed in pure JavaScript</p>
+  </footer>
+
+  <script src="/midi-to-image/midi-parser.js"></script>
+  <script src="/midi-to-image/audio-to-midi.js"></script>
+  <script src="/midi-to-image/ascii-art.js"></script>
+  <script src="/midi-to-image/sketch.js"></script>
+  <script src="/midi-to-image/memory.js"></script>
+  <script src="/midi-to-image/spotify-home.js"></script>
+  <script src="/midi-to-image/spotify-converter.js"></script>
+  <script src="/midi-to-image/app.js"></script>
+</body>
+
+</html>

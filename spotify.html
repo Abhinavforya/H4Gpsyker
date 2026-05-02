@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Spotify Playlist Viewer</title>
+  <link rel="stylesheet" href="spotify.css">
+  <!-- Distinctive typography choices per frontend.md guidance -->
+  <link href="https://fonts.googleapis.com/css2?family=Merriweather:ital,wght@0,300;0,700;1,700&family=Karla:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">♫</div>
+        <div class="title">Aural Studio — Spotify</div>
+      </div>
+      <div id="auth-area" class="auth">
+        <div id="auth-status">Not connected</div>
+        <button id="auth-btn" class="btn">Connect to Spotify</button>
+      </div>
+    </header>
+
+    <main class="content">
+      <section class="panel left">
+        <h2 class="panel-title">Playlist Viewer</h2>
+        <p class="muted">Pick a playlist to preview tracks and artwork.</p>
+
+        <div class="dropdown-wrap">
+          <label class="field-label">Playlists</label>
+          <div id="playlist-dropdown" class="dropdown">
+            <button id="dropdown-toggle" class="dropdown-toggle">Loading…</button>
+            <div id="dropdown-menu" class="dropdown-menu hidden"></div>
+          </div>
+        </div>
+
+        <div id="playlist-preview" class="preview empty">
+          <div class="cover" id="cover"></div>
+          <div class="meta">
+            <div id="playlist-name" class="name">No playlist selected</div>
+            <div id="playlist-desc" class="desc muted">Select a playlist to see tracks</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel right">
+        <h3 class="panel-title">Tracks</h3>
+        <ol id="track-list" class="tracks muted">No tracks to show.</ol>
+      </section>
+    </main>
+
+    <footer class="footer muted">This is a frontend demo. Wire `/api/login` and `/api/playlists` to integrate.</footer>
+  </div>
+
+  <script src="spotify.js"></script>
+</body>
+</html>

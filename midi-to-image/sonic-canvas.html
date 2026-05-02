@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SonicCanvas - Music to Visual Art</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%); color: #e0e0e0; min-height: 100vh; overflow: hidden; }
+        .container { display: grid; grid-template-columns: 300px 1fr; height: 100vh; }
+        .sidebar { background: rgba(10, 14, 39, 0.95); border-right: 1px solid rgba(255, 255, 255, 0.1); overflow-y: auto; padding: 20px; }
+        #p5-container { width: 100%; height: 100%; }
+        h1 { font-size: 24px; margin-bottom: 30px; background: linear-gradient(135deg, #FF6B6B, #4ECDC4); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+        .section { margin-bottom: 25px; }
+        .section-title { font-size: 12px; font-weight: 600; color: #4ECDC4; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 15px; }
+        .upload-area { border: 2px dashed rgba(78, 205, 196, 0.5); border-radius: 8px; padding: 20px; text-align: center; cursor: pointer; transition: all 0.3s ease; background: rgba(78, 205, 196, 0.05); }
+        .upload-area:hover { border-color: #4ECDC4; background: rgba(78, 205, 196, 0.1); }
+        .upload-area.dragover { border-color: #FF6B6B; background: rgba(255, 107, 107, 0.1); }
+        #fileInput { display: none; }
+        button { width: 100%; padding: 12px; margin-top: 10px; background: linear-gradient(135deg, #FF6B6B, #FF8E72); border: none; border-radius: 6px; color: white; font-weight: 600; cursor: pointer; transition: all 0.3s ease; font-size: 13px; }
+        button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(255, 107, 107, 0.3); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .spotify-btn { background: linear-gradient(135deg, #1DB954, #1ed760); }
+        .status { padding: 12px; margin-top: 15px; border-radius: 6px; font-size: 12px; min-height: 40px; display: flex; align-items: center; }
+        .status.loading { background: rgba(78, 205, 196, 0.1); color: #4ECDC4; }
+        .status.success { background: rgba(76, 205, 153, 0.1); color: #4ccd99; }
+        .status.error { background: rgba(255, 107, 107, 0.1); color: #FF6B6B; }
+        .metadata { margin-top: 15px; padding: 12px; background: rgba(255, 255, 255, 0.05); border-radius: 6px; font-size: 12px; border-left: 3px solid #4ECDC4; }
+        .ascii-preview { margin-top: 15px; padding: 10px; background: rgba(0, 0, 0, 0.3); border-radius: 6px; font-family: 'Courier New', monospace; font-size: 8px; line-height: 1.1; color: #4ECDC4; max-height: 120px; overflow-y: auto; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <h1>🎵 SonicCanvas</h1>
+            
+            <div class="section">
+                <div class="section-title">Upload Music</div>
+                <div class="upload-area" id="uploadArea">
+                    <div style="font-size:14px">📁 Drop MP3/WAV</div>
+                </div>
+                <input type="file" id="fileInput" accept=".mp3,.wav,.ogg,.flac">
+                <button id="analyzeBtn" disabled>Analyze</button>
+                <div id="status" class="status"></div>
+            </div>
+            
+            <div class="section">
+                <div class="section-title">Spotify</div>
+                <button class="spotify-btn" id="spotifyBtn">🎵 Connect</button>
+            </div>
+            
+            <div class="section" id="metadataSection" style="display:none;">
+                <div class="section-title">Results</div>
+                <div class="metadata" id="metadata"></div>
+                <div class="ascii-preview" id="asciiPreview"></div>
+            </div>
+        </div>
+        <div id="p5-container"></div>
+    </div>
+    
+    <script>
+        let currentEvents = [];
+        let currentMetadata = {};
+        let p5Instance = null;
+        
+        document.getElementById('uploadArea').addEventListener('click', () => document.getElementById('fileInput').click());
+        document.getElementById('fileInput').addEventListener('change', () => document.getElementById('analyzeBtn').disabled = !document.getElementById('fileInput').files.length);
+        
+        document.getElementById('analyzeBtn').addEventListener('click', async () => {
+            const file = document.getElementById('fileInput').files[0];
+            if (!file) return;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            const status = document.getElementById('status');
+            status.textContent = 'Analyzing...';
+            status.className = 'status loading';
+            
+            try {
+                const response = await fetch('/api/upload', { method: 'POST', body: formData });
+                const data = await response.json();
+                
+                currentEvents = data.events || [];
+                currentMetadata = data.metadata || {};
+                
+                const metadataDiv = document.getElementById('metadata');
+                metadataDiv.innerHTML = `
+                    <div style="margin:5px 0"><b>Duration:</b> ${(currentMetadata.duration || 0).toFixed(1)}s</div>
+                    <div style="margin:5px 0"><b>BPM:</b> ${(currentMetadata.tempo || 0).toFixed(1)}</div>
+                    <div style="margin:5px 0"><b>Beats:</b> ${currentMetadata.num_beats || 0}</div>
+                `;
+                document.getElementById('asciiPreview').textContent = data.ascii_art || '';
+                document.getElementById('metadataSection').style.display = 'block';
+                
+                startVisualization();
+                status.textContent = '✓ Analyzed ' + data.total_events + ' events';
+                status.className = 'status success';
+            } catch (error) {
+                status.textContent = '✗ Error: ' + error.message;
+                status.className = 'status error';
+            }
+        });
+        
+        function startVisualization() {
+            if (p5Instance) p5Instance.remove();
+            
+            const sketch = (p) => {
+                let particles = [];
+                let circleRadius = 50;
+                let time = 0;
+                
+                p.setup = function() {
+                    const container = document.getElementById('p5-container');
+                    const w = container.clientWidth;
+                    const h = container.clientHeight;
+                    p.createCanvas(w, h);
+                    
+                    for (let i = 0; i < 40; i++) {
+                        particles.push({
+                            x: p.random(w), y: p.random(h),
+                            vx: p.random(-1.5, 1.5), vy: p.random(-1.5, 1.5),
+                            size: p.random(2, 6), intensity: 0
+                        });
+                    }
+                };
+                
+                p.draw = function() {
+                    p.background(10, 14, 39, 40);
+                    time = p.frameCount / 60;
+                    
+                    currentEvents.forEach((event) => {
+                        if (event.time <= time) {
+                            if (event.type === 'beat') {
+                                circleRadius = p.lerp(circleRadius, 150, 0.15);
+                                p.noFill();
+                                p.stroke(255, 107, 107);
+                                p.strokeWeight(2);
+                                p.circle(p.width / 2, p.height / 2, circleRadius);
+                            }
+                        }
+                    });
+                    
+                    particles.forEach((particle) => {
+                        particle.x += particle.vx;
+                        particle.y += particle.vy;
+                        
+                        if (particle.x < 0 || particle.x > p.width) particle.vx *= -1;
+                        if (particle.y < 0 || particle.y > p.height) particle.vy *= -1;
+                        
+                        p.fill(78, 205, 196, particle.intensity * 200);
+                        p.noStroke();
+                        p.circle(particle.x, particle.y, particle.size);
+                        
+                        particle.intensity *= 0.93;
+                    });
+                    
+                    circleRadius *= 0.97;
+                };
+                
+                p.windowResized = function() {
+                    const container = document.getElementById('p5-container');
+                    if (container) {
+                        p.resizeCanvas(container.clientWidth, container.clientHeight);
+                    }
+                };
+            };
+            
+            p5Instance = new p5(sketch, 'p5-container');
+        }
+    </script>
+</body>
+</html>
