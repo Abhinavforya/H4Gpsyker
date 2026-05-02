@@ -153,28 +153,86 @@ function processAudioFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
-/* ── Clip to 15-20 second window ── */
+/* ── Clip renders to a short window ── */
 const MAX_RENDER_SECONDS = 20;
+
+function ticksToSeconds(ticks, data) {
+  const bpm = data.bpm || data.header?.bpm || 120;
+  const tpb = data.header?.division || 480;
+  const ticksPerBeat = tpb & 0x8000 ? 480 : tpb;
+  return (ticks / ticksPerBeat) * (60 / bpm);
+}
+
+function secondsToTicks(seconds, data) {
+  const bpm = data.bpm || data.header?.bpm || 120;
+  const tpb = data.header?.division || 480;
+  const ticksPerBeat = tpb & 0x8000 ? 480 : tpb;
+  return seconds * ticksPerBeat / (60 / bpm);
+}
+
+function getNoteStartSeconds(note, data) {
+  if (Number.isFinite(note.startSec)) return note.startSec;
+  if (Number.isFinite(note.time)) return note.time;
+  if (Number.isFinite(note.startTick)) return ticksToSeconds(note.startTick, data);
+  return 0;
+}
+
+function getNoteEndSeconds(note, data) {
+  if (Number.isFinite(note.endSec)) return note.endSec;
+  if (Number.isFinite(note.time) && Number.isFinite(note.duration)) return note.time + note.duration;
+  if (Number.isFinite(note.endTick)) return ticksToSeconds(note.endTick, data);
+  if (Number.isFinite(note.startTick) && Number.isFinite(note.durationTicks)) {
+    return ticksToSeconds(note.startTick + note.durationTicks, data);
+  }
+  return getNoteStartSeconds(note, data) + (note.durationSec || 0);
+}
 
 function clipToWindow(data, maxSeconds) {
   if (!data || !data.notes || data.notes.length === 0) return data;
 
-  const bpm = data.bpm || 120;
-  const tpb = data.header?.division || 480;
-  const secPerTick = (60 / bpm) / tpb;
-  const maxTick = maxSeconds / secPerTick;
+  const maxTick = secondsToTicks(maxSeconds, data);
 
   // Filter notes to within the time window
-  const clippedNotes = data.notes.filter(n => n.startTick <= maxTick);
-  const wasClipped = clippedNotes.length < data.notes.length;
+  const notesInWindow = data.notes.filter(n => getNoteStartSeconds(n, data) < maxSeconds);
+  const clippedNotes = notesInWindow.map(n => {
+    const startSec = getNoteStartSeconds(n, data);
+    const endSec = Math.min(getNoteEndSeconds(n, data), maxSeconds);
+    const startTick = Number.isFinite(n.startTick) ? n.startTick : secondsToTicks(startSec, data);
+    const endTick = Math.min(
+      Number.isFinite(n.endTick) ? n.endTick : secondsToTicks(endSec, data),
+      maxTick
+    );
 
-  if (!wasClipped) return data;
+    return {
+      ...n,
+      startSec,
+      endSec,
+      startTick,
+      endTick,
+      durationSec: Math.max(0, endSec - startSec),
+      durationTicks: Math.max(0, endTick - startTick),
+    };
+  });
+  const wasClipped = clippedNotes.length < data.notes.length;
+  const hadTrimmedEnds = clippedNotes.some((note, index) => {
+    const original = notesInWindow[index];
+    return original && getNoteEndSeconds(original, data) > maxSeconds && note.endSec <= maxSeconds;
+  });
+
+  const renderedDuration = Math.min(
+    maxSeconds,
+    data.duration || (data.maxTick ? ticksToSeconds(data.maxTick, data) : maxSeconds)
+  );
+
+  if (!wasClipped && !hadTrimmedEnds && (data.duration || 0) <= maxSeconds) return data;
 
   // Recalculate maxTick and duration
   const newMaxTick = clippedNotes.length > 0
     ? Math.max(...clippedNotes.map(n => n.endTick || n.startTick))
     : 0;
-  const newDuration = Math.min(maxSeconds, data.duration || maxSeconds);
+  const newDuration = clippedNotes.length > 0
+    ? Math.min(renderedDuration, Math.max(...clippedNotes.map(n => n.endSec || 0)))
+    : 0;
   const uniquePitches = [...new Set(clippedNotes.map(n => n.note))].sort((a, b) => a - b);
 
   // Rebuild tracks
@@ -229,7 +287,11 @@ function onMidiLoaded(data, filename) {
     duration: clipped.duration,
   });
 
-  const src = clipped.sourceType === 'audio' ? 'audio analysis' : 'MIDI file';
+  const src = clipped.sourceType === 'audio'
+    ? 'audio analysis'
+    : clipped.sourceType === 'spotify'
+      ? 'Spotify audio details'
+      : 'MIDI file';
   showToast(`✓ Loaded ${clipped.totalNotes} notes from ${filename} (${src})`, 'success');
 }
 
@@ -243,7 +305,7 @@ function renderStats(data) {
   const trackCount = data.tracks?.length || 1;
   
   el.innerHTML = [
-    stat('Source', data.sourceType === 'audio' ? 'Audio→MIDI' : `MIDI ${data.header?.format ?? ''}`),
+    stat('Source', getSourceLabel(data)),
     stat('Tracks', trackCount),
     stat('Notes', data.totalNotes || 0),
     stat('BPM', bpm),
@@ -253,6 +315,12 @@ function renderStats(data) {
 }
 function stat(label, val) {
   return `<div class="stat-badge">${label}: <span>${val}</span></div>`;
+}
+
+function getSourceLabel(data) {
+  if (data.sourceType === 'audio') return 'Audio→MIDI';
+  if (data.sourceType === 'spotify') return 'Spotify→MIDI';
+  return `MIDI ${data.header?.format ?? ''}`;
 }
 
 /* ── Tracks ── */
@@ -448,4 +516,6 @@ function setMidiData(data) {
 
 window.generateAsciiArt = () => renderAscii(false);
 window.generateP5Visualization = () => generateImage();
+window.loadMidiDataFromSpotify = (data, filename) => onMidiLoaded(data, filename || data.name || 'Spotify track');
 window.setMidiData = setMidiData;
+window.showToast = showToast;

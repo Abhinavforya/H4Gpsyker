@@ -25,7 +25,10 @@ fi
 # Verify environment variables
 echo -e "${BLUE}📋 Checking environment variables...${NC}"
 cd "$PROJECT_DIR"
+set -a
 source .env
+set +a
+PORT="${PORT:-8000}"
 
 if [ -z "$SPOTIFY_CLIENT_ID" ]; then
     echo -e "${RED}❌ SPOTIFY_CLIENT_ID not set in .env${NC}"
@@ -41,6 +44,18 @@ echo -e "${GREEN}✅ SPOTIFY_CLIENT_ID configured${NC}"
 echo -e "${GREEN}✅ SPOTIFY_CLIENT_SECRET configured${NC}"
 echo -e "${GREEN}✅ PORT: $PORT${NC}\n"
 
+find_ngrok() {
+    local candidate
+    while IFS= read -r candidate; do
+        if [ -x "$candidate" ] && "$candidate" version >/dev/null 2>&1; then
+            echo "$candidate"
+            return 0
+        fi
+    done < <(which -a ngrok 2>/dev/null)
+
+    return 1
+}
+
 # Check if dependencies are installed
 echo -e "${BLUE}📦 Checking dependencies...${NC}"
 if [ ! -d "node_modules" ]; then
@@ -55,14 +70,48 @@ echo -e "${BLUE}🌐 Checking ngrok...${NC}"
 NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | jq -r '.tunnels[0].public_url' 2>/dev/null)
 
 if [ -z "$NGROK_URL" ] || [ "$NGROK_URL" = "null" ]; then
-    echo -e "${YELLOW}⚠️  ngrok not running${NC}"
-    echo "To enable ngrok tunneling, run in another terminal:"
-    echo -e "${BLUE}  ngrok http 8000${NC}\n"
-    REDIRECT_URI="http://localhost:8000/auth/spotify/callback"
+    NGROK_BIN="$(find_ngrok || true)"
+    if [ -z "$NGROK_BIN" ]; then
+        echo -e "${RED}❌ ngrok is not installed or not on PATH${NC}"
+        exit 1
+    fi
+
+    echo -e "${YELLOW}⚠️  ngrok not running; starting tunnel for http://localhost:$PORT${NC}"
+    nohup "$NGROK_BIN" http "$PORT" >/tmp/chargen-ngrok.log 2>&1 &
+
+    for _ in {1..10}; do
+        NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | jq -r '.tunnels[] | select(.proto == "https") | .public_url' 2>/dev/null | head -n 1)
+        if [ -n "$NGROK_URL" ] && [ "$NGROK_URL" != "null" ]; then
+            break
+        fi
+        sleep 1
+    done
+
+    if [ -z "$NGROK_URL" ] || [ "$NGROK_URL" = "null" ]; then
+        echo -e "${RED}❌ Could not start ngrok. Check /tmp/chargen-ngrok.log${NC}"
+        exit 1
+    fi
 else
-    echo -e "${GREEN}✅ ngrok active: $NGROK_URL${NC}\n"
-    REDIRECT_URI="$NGROK_URL/auth/spotify/callback"
+    NGROK_URL=$(curl -s http://127.0.0.1:4040/api/tunnels 2>/dev/null | jq -r '.tunnels[] | select(.proto == "https") | .public_url' 2>/dev/null | head -n 1)
 fi
+
+echo -e "${GREEN}✅ ngrok active: $NGROK_URL${NC}\n"
+REDIRECT_URI="$NGROK_URL/auth/spotify/callback"
+
+upsert_env() {
+    local key="$1"
+    local value="$2"
+    if grep -q "^${key}=" "$PROJECT_DIR/.env"; then
+        sed -i "s|^${key}=.*|${key}=${value}|" "$PROJECT_DIR/.env"
+    else
+        echo "${key}=${value}" >> "$PROJECT_DIR/.env"
+    fi
+}
+
+upsert_env "NGROK_URL" "$NGROK_URL"
+upsert_env "SPOTIFY_SITE_URL" "$NGROK_URL"
+upsert_env "SPOTIFY_REDIRECT_URI" "$REDIRECT_URI"
+upsert_env "REDIRECT_URI" "$REDIRECT_URI"
 
 # Verify server syntax
 echo -e "${BLUE}✔️  Checking server syntax...${NC}"
@@ -85,11 +134,8 @@ echo "  Redirect URI: $REDIRECT_URI"
 echo ""
 
 echo -e "${YELLOW}⚠️  IMPORTANT - Update Spotify Dashboard:${NC}"
-echo "  Add redirect URIs:"
-echo "    • http://localhost:8000/auth/spotify/callback"
-if [ ! -z "$NGROK_URL" ] && [ "$NGROK_URL" != "null" ]; then
-    echo "    • $NGROK_URL/auth/spotify/callback"
-fi
+echo "  Add this exact redirect URI:"
+echo "    • $NGROK_URL/auth/spotify/callback"
 echo ""
 
 echo -e "${BLUE}🎯 Ready to start server!${NC}"

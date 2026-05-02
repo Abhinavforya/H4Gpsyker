@@ -41,7 +41,11 @@ async function convertSpotifySongsToAsciiArt(songs) {
     }
 
     console.log('✅ All songs processed!');
-    alert(`✅ Converted ${songs.length} song(s) to ASCII art!`);
+    if (window.showToast) {
+      window.showToast(`✓ Generated art from ${songs.length} Spotify song(s)`, 'success');
+    } else {
+      alert(`✅ Converted ${songs.length} song(s) to ASCII art!`);
+    }
   } catch (err) {
     console.error('❌ Conversion failed:', err);
     alert('Error during conversion: ' + err.message);
@@ -55,30 +59,16 @@ async function convertSpotifySongsToAsciiArt(songs) {
  */
 async function processSpotifySongToAsciiArt(song) {
   try {
-    // For now, we'll create a synthetic audio representation
-    // In a real scenario, you'd:
-    // 1. Get the preview URL from Spotify
-    // 2. Download and analyze the audio
-    // 3. Convert to MIDI
-    // 4. Generate ASCII art
-
-    // Create a synthetic MIDI based on song characteristics
+    // Spotify gives us rich track/audio-feature metadata here. We map those
+    // details into MIDI-like notes, then let app.js run the normal render path.
     const syntheticMidi = generateSyntheticMidiFromSong(song);
 
-    if (window.setMidiData) {
+    if (window.loadMidiDataFromSpotify) {
+      window.loadMidiDataFromSpotify(syntheticMidi, song.name);
+    } else if (window.setMidiData) {
       window.setMidiData(syntheticMidi);
-    } else {
-      window.midiData = syntheticMidi;
-    }
-
-    // Trigger ASCII art generation
-    if (window.generateAsciiArt) {
-      window.generateAsciiArt();
-    }
-
-    // Also trigger p5.js visualization
-    if (window.generateP5Visualization) {
-      window.generateP5Visualization();
+      if (window.generateAsciiArt) window.generateAsciiArt();
+      if (window.generateP5Visualization) window.generateP5Visualization();
     }
 
     return true;
@@ -101,32 +91,93 @@ function generateSyntheticMidiFromSong(song) {
   const energy = features.energy ?? (popularity / 100);
   const danceability = features.danceability ?? 0.5;
   const valence = features.valence ?? 0.5;
+  const acousticness = features.acousticness ?? 0.35;
+  const speechiness = features.speechiness ?? 0.08;
+  const instrumentalness = features.instrumentalness ?? 0.1;
+  const loudness = features.loudness ?? -10;
 
   // Create a melody based on song characteristics
-  const baseNote = 48 + Math.round((popularity / 100) * 24) + Math.round(valence * 6);
-  const duration = song.duration || 180000; // Default 3 minutes
-  const patternLength = Math.max(8, Math.min(32, Math.round((tempo / 120) * 16)));
-  const noteDuration = (duration / 1000) / patternLength;
+  const baseNote = Math.max(36, Math.min(84, 45 + Math.round(valence * 18) + Math.round((popularity / 100) * 12)));
+  const sourceDuration = song.duration || 180000; // Default 3 minutes
+  const renderDuration = Math.min(20, Math.max(8, sourceDuration / 1000));
+  const patternLength = Math.max(16, Math.min(56, Math.round((tempo / 120) * 24 + danceability * 12)));
+  const noteDuration = renderDuration / patternLength;
+  const tpb = 480;
+  const secondsPerBeat = 60 / tempo;
+  const secondsPerTick = secondsPerBeat / tpb;
+  const scale = valence >= 0.5
+    ? [0, 2, 4, 5, 7, 9, 11, 12]
+    : [0, 2, 3, 5, 7, 8, 10, 12];
 
   // Generate notes based on song name hash for uniqueness
-  const hash = hashString(song.name);
+  const artistText = Array.isArray(song.artists)
+    ? song.artists.map(a => a.name || a).join(', ')
+    : (song.artists || '');
+  const hash = hashString(`${song.name}-${artistText}-${song.id || ''}`);
   const pattern = generatePattern(hash, patternLength);
 
   pattern.forEach((offset, index) => {
-    const motionOffset = Math.round((offset - 6) * (0.5 + danceability));
+    const phrase = index / Math.max(1, patternLength - 1);
+    const scaleOffset = scale[offset % scale.length];
+    const octaveLift = Math.floor(offset / scale.length) * 12;
+    const motionOffset = scaleOffset + octaveLift + Math.round(Math.sin(phrase * Math.PI * 2) * danceability * 5);
+    const note = Math.max(36, Math.min(96, baseNote + motionOffset - Math.round(acousticness * 5)));
+    const startSec = index * noteDuration;
+    const durationSec = Math.max(0.08, noteDuration * (0.45 + energy * 0.45 + instrumentalness * 0.2));
+    const startTick = Math.round(startSec / secondsPerTick);
+    const endTick = Math.round((startSec + durationSec) / secondsPerTick);
+    const accent = index % Math.max(2, Math.round(8 - danceability * 4)) === 0 ? 12 : 0;
+    const loudnessBoost = Math.max(0, Math.min(20, loudness + 24));
+
     midiNotes.push({
-      note: baseNote + motionOffset,
-      time: index * noteDuration,
-      duration: noteDuration * 0.9,
-      velocity: Math.max(24, Math.min(127, Math.round(40 + energy * 60 + (index % 8) * 4)))
+      note,
+      channel: 0,
+      velocity: Math.max(24, Math.min(127, Math.round(34 + energy * 58 + loudnessBoost + accent - speechiness * 10))),
+      startTick,
+      endTick,
+      durationTicks: Math.max(1, endTick - startTick),
+      startSec,
+      endSec: startSec + durationSec,
+      durationSec,
+      trackIdx: 0,
+      trackName: 'Spotify Audio Details',
+      bpm: tempo,
     });
   });
 
+  const maxTick = midiNotes.length ? Math.max(...midiNotes.map(n => n.endTick)) : 0;
+  const uniquePitches = [...new Set(midiNotes.map(n => n.note))].sort((a, b) => a - b);
+  const avgVelocity = midiNotes.length
+    ? midiNotes.reduce((sum, note) => sum + note.velocity, 0) / midiNotes.length
+    : 0;
+
   return {
     name: song.name,
+    header: { format: 0, ntracks: 1, division: tpb },
     tracks: [{
-      notes: midiNotes
-    }]
+      index: 0,
+      name: 'Spotify Audio Details',
+      noteCount: midiNotes.length,
+      notes: midiNotes,
+      minNote: uniquePitches[0] || 0,
+      maxNote: uniquePitches[uniquePitches.length - 1] || 127,
+      avgVelocity,
+    }],
+    notes: midiNotes,
+    bpm: Math.round(tempo),
+    totalNotes: midiNotes.length,
+    maxTick,
+    uniquePitches,
+    duration: renderDuration,
+    sourceType: 'spotify',
+    spotifyTrack: {
+      id: song.id,
+      name: song.name,
+      artists: artistText,
+      duration: sourceDuration,
+      popularity,
+      audioFeatures: features,
+    },
   };
 }
 

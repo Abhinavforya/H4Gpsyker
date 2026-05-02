@@ -5,6 +5,7 @@
 
 let currentUser = null;
 let currentPlaylistSongs = [];
+let currentMiniPlayerSong = null;
 const SPOTIFY_API_BASE = window.SPOTIFY_API_BASE_URL || '';
 
 function apiUrl(path) {
@@ -29,6 +30,27 @@ function getAccessToken() {
   return consumeAccessTokenFromUrl() || localStorage.getItem('spotify_access_token');
 }
 
+function spotifyAuthHeaders() {
+  const token = getAccessToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function getSongClientId(song, index = 0) {
+  return String(song?.id || song?.uri || `playlist-song-${index}`);
+}
+
+function normalizePlaylistSong(song, index) {
+  const artists = Array.isArray(song?.artists)
+    ? song.artists.map(artist => artist?.name || artist).filter(Boolean).join(', ')
+    : (song?.artists || 'Unknown artist');
+
+  return {
+    ...song,
+    _clientId: getSongClientId(song, index),
+    artists,
+  };
+}
+
 // Initialize Spotify home on page load
 document.addEventListener('DOMContentLoaded', async () => {
   consumeAccessTokenFromUrl();
@@ -41,14 +63,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function checkSpotifyAuth() {
   const token = getAccessToken();
 
-  if (!token) {
-    showMainApp();
-    return;
-  }
-
   try {
     const response = await fetch(apiUrl('/api/me'), {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     
     if (response.ok) {
@@ -138,11 +155,10 @@ async function loadSpotifyData() {
 async function loadPlaylists() {
   const container = document.getElementById('playlistsContainer');
   const count = document.getElementById('playlistCount');
-  const token = getAccessToken();
   
   try {
     const response = await fetch(apiUrl('/api/playlists'), {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: spotifyAuthHeaders(),
     });
     
     if (!response.ok) {
@@ -211,11 +227,10 @@ async function loadRecentlyPlayedArtists() {
   const songsCount = document.getElementById('songsCount');
   const artistsContainer = document.getElementById('artistsContainer');
   const artistsCount = document.getElementById('artistCount');
-  const token = getAccessToken();
   
   try {
     const response = await fetch(apiUrl('/api/recently-played'), {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: spotifyAuthHeaders(),
     });
     
     if (!response.ok) {
@@ -384,6 +399,11 @@ function setupEventListeners() {
   if (convertBtn) {
     convertBtn.addEventListener('click', convertSelectedSongs);
   }
+
+  const convertPreviewBtn = document.getElementById('convertPreviewSongBtn');
+  if (convertPreviewBtn) {
+    convertPreviewBtn.addEventListener('click', convertMiniPlayerSong);
+  }
 }
 
 /**
@@ -398,11 +418,12 @@ async function openPlaylistModal(playlist) {
 
   // Set title
   if (title) {
-    title.textContent = `Songs in "${escapeHtml(playlist.name)}"`;
+    title.textContent = `Songs in "${playlist.name}"`;
   }
 
   // Show modal
   modal.style.display = 'flex';
+  clearMiniPlayer();
   
   // Clear and show loading state
   container.innerHTML = '';
@@ -432,18 +453,19 @@ function closePlaylistModal() {
  */
 async function loadPlaylistSongs(playlistId) {
   const container = document.getElementById('playlistSongsContainer');
-  const token = getAccessToken();
 
   try {
+    const encodedPlaylistId = encodeURIComponent(playlistId);
     const candidatePaths = [
-      `/api/spotify/playlist/${playlistId}/tracks`,
-      `/api/playlist/${playlistId}/tracks`,
+      `/api/spotify/playlist/${encodedPlaylistId}/tracks`,
+      `/api/playlist/${encodedPlaylistId}/tracks`,
     ];
 
     let response = null;
+    let errorMessage = 'Failed to fetch songs';
     for (const path of candidatePaths) {
       const candidateResponse = await fetch(apiUrl(path), {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: spotifyAuthHeaders(),
       });
 
       if (candidateResponse.ok) {
@@ -453,16 +475,22 @@ async function loadPlaylistSongs(playlistId) {
 
       if (candidateResponse.status !== 404) {
         response = candidateResponse;
+        try {
+          const errorData = await candidateResponse.clone().json();
+          errorMessage = errorData.error || errorData.message || errorMessage;
+        } catch {
+          errorMessage = `${errorMessage} (${candidateResponse.status})`;
+        }
         break;
       }
     }
 
     if (!response || !response.ok) {
-      throw new Error('Failed to fetch songs');
+      throw new Error(errorMessage);
     }
 
     const data = await response.json();
-    const songs = data.tracks || [];
+    const songs = (data.tracks || []).map(normalizePlaylistSong);
     currentPlaylistSongs = songs;
     window.currentSpotifyPlaylistSongs = songs;
 
@@ -474,50 +502,154 @@ async function loadPlaylistSongs(playlistId) {
     }
 
     // Create song items
-    songs.forEach(song => {
-      const item = createSongItem(song);
+    songs.forEach((song, index) => {
+      const item = createSongItem(song, index);
       container.appendChild(item);
     });
+
+    updateMiniPlayer(songs[0]);
 
     // Store songs for filtering
     container.dataset.allSongs = JSON.stringify(songs);
   } catch (err) {
     console.error('❌ Failed to load playlist songs:', err);
-    container.innerHTML = '<div class="empty-state">Failed to load songs</div>';
+    container.innerHTML = `<div class="empty-state">${escapeHtml(err.message || 'Failed to load songs')}</div>`;
   }
 }
 
 /**
  * Create song item element
  */
-function createSongItem(song) {
+function createSongItem(song, index = 0) {
   const item = document.createElement('div');
   item.className = 'song-item';
-  item.dataset.songId = song.id;
-  item.dataset.songName = song.name.toLowerCase();
+  const songClientId = song._clientId || getSongClientId(song, index);
+  item.dataset.songId = songClientId;
+  item.dataset.songName = (song.name || '').toLowerCase();
 
   const duration = formatDuration(song.duration);
   const explicit = song.explicit ? '🅴 ' : '';
 
   item.innerHTML = `
-    <input type="checkbox" class="song-checkbox" data-song-id="${song.id}">
+    <input type="checkbox" class="song-checkbox" data-song-id="${escapeHtml(songClientId)}">
+    ${song.image ? `<img src="${song.image}" alt="${escapeHtml(song.name)}" class="song-item-image">` : '<div class="song-item-image song-item-image-fallback">♪</div>'}
     <div class="song-item-info">
       <div class="song-item-name">${escapeHtml(song.name)}</div>
       <div class="song-item-meta">
-        <span>${escapeHtml(song.artists)}</span>
+        <span>${escapeHtml(song.artists || 'Unknown artist')}</span>
         ${explicit ? `<span>${explicit}</span>` : ''}
       </div>
     </div>
     <div class="song-item-duration">${duration}</div>
   `;
 
+  item.addEventListener('click', (event) => {
+    if (event.target.classList.contains('song-checkbox')) return;
+    updateMiniPlayer(song);
+  });
+
   return item;
+}
+
+function clearMiniPlayer() {
+  currentMiniPlayerSong = null;
+  document.querySelectorAll('.song-item.is-active').forEach(item => item.classList.remove('is-active'));
+
+  const player = document.getElementById('playlistMiniPlayer');
+  const audio = document.getElementById('miniPlayerAudio');
+  if (audio) {
+    audio.pause();
+    audio.removeAttribute('src');
+    audio.load();
+  }
+  if (player) player.hidden = true;
+}
+
+function updateMiniPlayer(song) {
+  if (!song) {
+    clearMiniPlayer();
+    return;
+  }
+
+  currentMiniPlayerSong = song;
+
+  document.querySelectorAll('.song-item.is-active').forEach(item => item.classList.remove('is-active'));
+  const activeItem = document.querySelector(`.song-item[data-song-id="${CSS.escape(song._clientId || getSongClientId(song))}"]`);
+  if (activeItem) activeItem.classList.add('is-active');
+
+  const player = document.getElementById('playlistMiniPlayer');
+  const image = document.getElementById('miniPlayerImage');
+  const title = document.getElementById('miniPlayerTitle');
+  const artist = document.getElementById('miniPlayerArtist');
+  const audio = document.getElementById('miniPlayerAudio');
+  const features = document.getElementById('miniPlayerFeatures');
+
+  if (player) player.hidden = false;
+  if (image) {
+    image.src = song.image || 'https://via.placeholder.com/96?text=Album';
+    image.alt = `${song.name} album cover`;
+  }
+  if (title) title.textContent = song.name || 'Unknown track';
+  if (artist) artist.textContent = song.artists || 'Unknown artist';
+
+  if (audio) {
+    if (song.previewUrl) {
+      audio.hidden = false;
+      audio.src = song.previewUrl;
+    } else {
+      audio.hidden = true;
+      audio.removeAttribute('src');
+    }
+    audio.load();
+  }
+
+  if (features) {
+    features.innerHTML = renderAudioFeatureBadges(song);
+  }
+}
+
+function renderAudioFeatureBadges(song) {
+  const feature = song.audioFeatures || {};
+  const badges = [
+    ['Duration', formatDuration(song.duration || 0)],
+    ['Popularity', song.popularity ?? 0],
+    ['Tempo', feature.tempo ? `${Math.round(feature.tempo)} BPM` : '120 BPM'],
+    ['Energy', formatFeaturePercent(feature.energy)],
+    ['Dance', formatFeaturePercent(feature.danceability)],
+    ['Mood', formatFeaturePercent(feature.valence)],
+  ];
+
+  return badges.map(([label, value]) => `
+    <span class="mini-feature-badge">
+      <span>${label}</span>${value}
+    </span>
+  `).join('');
+}
+
+function formatFeaturePercent(value) {
+  if (!Number.isFinite(value)) return '50%';
+  return `${Math.round(value * 100)}%`;
+}
+
+async function convertMiniPlayerSong() {
+  if (!currentMiniPlayerSong) {
+    alert('Choose a song in the player first');
+    return;
+  }
+
+  closePlaylistModal();
+  if (window.convertSpotifySongsToAsciiArt) {
+    await window.convertSpotifySongsToAsciiArt([currentMiniPlayerSong]);
+  } else {
+    alert('Conversion feature is being loaded. Please try again.');
+  }
 }
 
 /**
  * Format duration from milliseconds to MM:SS
  */
 function formatDuration(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return '0:00';
   const totalSeconds = Math.floor(ms / 1000);
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
@@ -573,7 +705,7 @@ async function convertSelectedSongs() {
 
   const selectedSongs = checkboxes.map(cb => {
     const songId = cb.dataset.songId;
-    const fullSong = currentPlaylistSongs.find(song => song.id === songId);
+    const fullSong = currentPlaylistSongs.find(song => song._clientId === songId || song.id === songId || song.uri === songId);
 
     return fullSong || {
       id: songId,

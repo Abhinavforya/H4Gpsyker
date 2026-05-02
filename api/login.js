@@ -6,7 +6,7 @@ export default function handler(req, res) {
   const forwardedProto = req.headers['x-forwarded-proto'] || (process.env.VERCEL ? 'https' : 'http');
   const siteUrl = process.env.SPOTIFY_SITE_URL || (forwardedHost ? `${forwardedProto}://${forwardedHost}` : '');
   const redirectUri = process.env.SPOTIFY_REDIRECT_URI || (siteUrl ? `${siteUrl}/api/callback` : '');
-  const scope = 'user-read-private user-read-email playlist-read-private user-read-recently-played';
+  const scope = 'user-read-private user-read-email playlist-read-private playlist-read-collaborative user-read-recently-played';
   const requestedNext = typeof req.query?.next === 'string' && req.query.next.startsWith('/') ? req.query.next : (process.env.SPOTIFY_POST_LOGIN_PATH || '/spotify.html');
 
   if (!clientId || !redirectUri) {

@@ -16,6 +16,7 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
+app.set('trust proxy', true);
 
 // Spotify OAuth Configuration
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
@@ -25,13 +26,46 @@ const REDIRECT_URI = process.env.REDIRECT_URI || 'http://localhost:8000/auth/spo
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize';
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
 const SPOTIFY_API_URL = 'https://api.spotify.com/v1';
+const SESSION_SECRET = process.env.SESSION_SECRET || 'cozy-player-dev-secret';
+const SESSION_MAX_AGE_DAYS = Number(process.env.SESSION_MAX_AGE_DAYS || 7);
+const SESSION_MAX_AGE_MS = SESSION_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+
+if (!process.env.SESSION_SECRET) {
+  console.warn('⚠️ SESSION_SECRET is not set. Using a stable development secret.');
+}
+
+function getPublicOrigin(req) {
+  const configuredOrigin = process.env.SPOTIFY_SITE_URL || process.env.NGROK_URL;
+  if (configuredOrigin) {
+    return configuredOrigin.replace(/\/$/, '');
+  }
+
+  const forwardedProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
+  const proto = forwardedProto || req.protocol || 'http';
+  return `${proto}://${req.get('host')}`;
+}
+
+function base64UrlEncode(buffer) {
+  return buffer
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+function createPkcePair() {
+  const verifier = base64UrlEncode(crypto.randomBytes(64));
+  const challenge = base64UrlEncode(crypto.createHash('sha256').update(verifier).digest());
+  return { verifier, challenge };
+}
 
 // Middleware
 app.use(session({
-  secret: process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex'),
+  secret: SESSION_SECRET,
   resave: false,
-  saveUninitialized: true,
-  cookie: { secure: false, httpOnly: true, maxAge: 24 * 60 * 60 * 1000 }
+  saveUninitialized: false,
+  rolling: true,
+  cookie: { secure: false, httpOnly: true, maxAge: SESSION_MAX_AGE_MS }
 }));
 
 app.use(cors({
@@ -69,23 +103,135 @@ async function fetchAudioFeatures(accessToken, trackIds) {
 
   for (let i = 0; i < trackIds.length; i += 100) {
     const batch = trackIds.slice(i, i + 100);
-    const response = await axios.get(`${SPOTIFY_API_URL}/audio-features`, {
-      headers: { 'Authorization': `Bearer ${accessToken}` },
-      params: { ids: batch.join(',') }
-    });
+    try {
+      const response = await axios.get(`${SPOTIFY_API_URL}/audio-features`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+        params: { ids: batch.join(',') }
+      });
 
-    for (const feature of response.data.audio_features || []) {
-      if (feature && feature.id) {
-        featuresById.set(feature.id, feature);
+      for (const feature of response.data.audio_features || []) {
+        if (feature && feature.id) {
+          featuresById.set(feature.id, feature);
+        }
       }
+    } catch (err) {
+      console.warn('⚠️ Audio features unavailable for batch:', err.response?.status || err.message);
     }
   }
 
   return featuresById;
 }
 
-// Serve static files from the app folder
-app.use('/midi-to-image', express.static(path.join(__dirname, 'midi-to-image')));
+function normalizeAudioFeatures(feature) {
+  if (!feature) {
+    return {
+      tempo: 120,
+      energy: 0.55,
+      valence: 0.5,
+      danceability: 0.52,
+      acousticness: 0.24,
+      instrumentalness: 0.08,
+      liveness: 0.35,
+      speechiness: 0.08,
+      loudness: -8,
+    };
+  }
+
+  return {
+    tempo: feature.tempo ?? 0,
+    energy: feature.energy ?? 0,
+    valence: feature.valence ?? 0,
+    danceability: feature.danceability ?? 0,
+    acousticness: feature.acousticness ?? 0,
+    instrumentalness: feature.instrumentalness ?? 0,
+    liveness: feature.liveness ?? 0,
+    speechiness: feature.speechiness ?? 0,
+    loudness: feature.loudness ?? 0,
+  };
+}
+
+const audioFeaturesCache = new Map();
+const AUDIO_FEATURES_CACHE_TTL_MS = 10 * 60 * 1000;
+
+function getCachedAudioFeatures(trackId) {
+  const cached = audioFeaturesCache.get(trackId);
+  if (!cached) return null;
+  if (Date.now() - cached.cachedAt > AUDIO_FEATURES_CACHE_TTL_MS) {
+    audioFeaturesCache.delete(trackId);
+    return null;
+  }
+  return cached.value;
+}
+
+function setCachedAudioFeatures(trackId, value) {
+  audioFeaturesCache.set(trackId, { cachedAt: Date.now(), value });
+}
+
+function getRequestAccessToken(req) {
+  const authHeader = req.headers.authorization || '';
+  if (authHeader.startsWith('Bearer ')) {
+    return authHeader.slice('Bearer '.length).trim();
+  }
+  return req.session?.access_token || null;
+}
+
+function getSessionTokenSecondsRemaining(req) {
+  const expiresIn = req.session?.expires_in || 3600;
+  const obtainedAt = req.session?.token_obtained_at || Math.floor(Date.now() / 1000);
+  const ageSeconds = Math.max(0, Math.floor(Date.now() / 1000) - obtainedAt);
+  return Math.max(0, expiresIn - ageSeconds);
+}
+
+app.get('/api/audio-features/:trackId', async (req, res) => {
+  const { trackId } = req.params;
+  const accessToken = getRequestAccessToken(req);
+
+  if (!accessToken) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  const cached = getCachedAudioFeatures(trackId);
+  if (cached) {
+    return res.json({ ...cached, cached: true });
+  }
+
+  try {
+    if (req.session?.access_token) {
+      await ensureValidToken(req);
+    }
+
+    const response = await axios.get(`${SPOTIFY_API_URL}/audio-features/${trackId}`, {
+      headers: { Authorization: `Bearer ${req.session?.access_token || accessToken}` }
+    });
+
+    const normalized = normalizeAudioFeatures(response.data);
+    const payload = {
+      id: response.data?.id || trackId,
+      raw: response.data,
+      normalized,
+    };
+
+    setCachedAudioFeatures(trackId, payload);
+    res.json({ ...payload, cached: false });
+  } catch (err) {
+    console.error('❌ Failed to fetch audio features:', err.message);
+    const fallback = normalizeAudioFeatures(null);
+    const payload = {
+      id: trackId,
+      raw: null,
+      normalized: fallback,
+      fallback: true,
+    };
+    setCachedAudioFeatures(trackId, payload);
+    res.json({ ...payload, cached: false });
+  }
+});
+
+
+
+
+
+
 
 // Send the site root to the MIDI-to-image landing page
 app.get('/', (req, res) => {
@@ -101,20 +247,58 @@ app.get('/midi-to-image/', (req, res) => {
   res.redirect('/midi-to-image/index.html');
 });
 
+// Cozy player route
+app.get('/cozy-player', (req, res) => {
+  res.sendFile(path.join(__dirname, 'cozy-player.html'));
+});
+
+app.get('/cozy-player/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'cozy-player.html'));
+});
+
+// Serve static files from the app folder (after routes so they don't intercept)
+app.use('/midi-to-image', express.static(path.join(__dirname, 'midi-to-image')));
+app.use('/cozy-player', express.static(path.join(__dirname, '.')));
 // ==================== SPOTIFY OAUTH ROUTES ====================
+
+// Cozy Player - Get access token for Spotify Web Playback SDK
+app.get('/api/spotify/token', async (req, res) => {
+  if (!req.session.access_token) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    await ensureValidToken(req);
+  } catch (err) {
+    return res.status(401).json({ error: 'Token refresh failed' });
+  }
+
+  res.json({
+    access_token: req.session.access_token,
+    token_type: 'Bearer',
+    expires_in: getSessionTokenSecondsRemaining(req)
+  });
+});
 
 // Step 1: Redirect user to Spotify login
 app.get('/auth/spotify', (req, res) => {
   const state = crypto.randomBytes(32).toString('hex');
+  const pkce = createPkcePair();
   req.session.oauth_state = state;
-  
+  req.session.pkce_verifier = pkce.verifier;
+
   const scopes = [
+    'streaming',
     'user-read-private',
     'user-read-email',
+    'user-read-playback-state',
+    'user-modify-playback-state',
+    'user-read-currently-playing',
     'user-library-read',
     'user-top-read',
     'playlist-read-private',
     'playlist-read-collaborative',
+    'user-read-recently-played',
   ].join(' ');
 
   const authUrl = new URL(SPOTIFY_AUTH_URL);
@@ -123,13 +307,14 @@ app.get('/auth/spotify', (req, res) => {
   authUrl.searchParams.append('scope', scopes);
   authUrl.searchParams.append('redirect_uri', REDIRECT_URI);
   authUrl.searchParams.append('state', state);
+  authUrl.searchParams.append('code_challenge_method', 'S256');
+  authUrl.searchParams.append('code_challenge', pkce.challenge);
 
   console.log('🎵 Redirecting to Spotify login...');
   res.redirect(authUrl.toString());
 });
 
-// Step 2: Handle Spotify callback
-app.get('/auth/spotify/callback', async (req, res) => {
+async function handleSpotifyCallback(req, res) {
   const { code, state, error } = req.query;
 
   if (error) {
@@ -154,13 +339,13 @@ app.get('/auth/spotify/callback', async (req, res) => {
       code,
       redirect_uri: REDIRECT_URI,
       client_id: SPOTIFY_CLIENT_ID,
-      client_secret: SPOTIFY_CLIENT_SECRET,
+      code_verifier: req.session.pkce_verifier,
     }), {
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
     });
 
     const { access_token, refresh_token, expires_in } = response.data;
-    
+
     // Store tokens in session with timestamp
     req.session.access_token = access_token;
     req.session.refresh_token = refresh_token;
@@ -184,15 +369,22 @@ app.get('/auth/spotify/callback', async (req, res) => {
 
     console.log('✅ User:', user.display_name);
 
-    res.redirect('/midi-to-image/index.html?spotify_connected=true');
+    // Redirect to cozy player. The browser asks /api/spotify/token after the session cookie is set.
+    const redirectUrl = new URL('/cozy-player', getPublicOrigin(req));
+
+    res.redirect(redirectUrl.toString());
   } catch (err) {
     console.error('❌ Token exchange failed:', err.message);
     console.error('   Full error:', err.response?.data || err);
     console.error('   REDIRECT_URI:', REDIRECT_URI);
     console.error('   CLIENT_ID:', SPOTIFY_CLIENT_ID?.substring(0, 8) + '...');
-    res.redirect(`/midi-to-image/index.html?error=token_exchange_failed`);
+    res.redirect(`/cozy-player?error=token_exchange_failed`);
   }
-});
+}
+
+// Step 2: Handle Spotify callback
+app.get('/auth/spotify/callback', handleSpotifyCallback);
+app.get('/auth/callback', handleSpotifyCallback);
 
 // Refresh token if expired
 async function ensureValidToken(req) {
@@ -212,7 +404,6 @@ async function ensureValidToken(req) {
         grant_type: 'refresh_token',
         refresh_token: req.session.refresh_token,
         client_id: SPOTIFY_CLIENT_ID,
-        client_secret: SPOTIFY_CLIENT_SECRET,
       }), {
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
       });
@@ -234,6 +425,31 @@ app.get('/api/spotify/profile', (req, res) => {
   const token = req.session?.access_token || (req.headers.authorization || '').replace('Bearer ', '');
   if (!token) return res.status(401).json({ error: 'Not authenticated' });
   res.json(req.session.user);
+});
+
+app.get('/api/me', async (req, res) => {
+  const token = getRequestAccessToken(req);
+  if (!token) return res.status(401).json({ error: 'Not authenticated' });
+
+  if (req.session?.user) {
+    return res.json(req.session.user);
+  }
+
+  try {
+    const response = await axios.get(`${SPOTIFY_API_URL}/me`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    res.json({
+      id: response.data.id,
+      name: response.data.display_name,
+      email: response.data.email,
+      image: response.data.images?.[0]?.url,
+    });
+  } catch (err) {
+    console.error('❌ Failed to fetch profile:', err.message);
+    res.status(401).json({ error: 'No profile available' });
+  }
 });
 
 // Get user's liked songs (saved tracks)
@@ -269,6 +485,7 @@ app.get('/api/spotify/me/tracks', async (req, res) => {
       .filter(item => item.track)
       .map(item => ({
         id: item.track.id,
+        uri: item.track.uri,
         name: item.track.name,
         artists: item.track.artists?.map(a => a.name).join(', '),
         album: item.track.album?.name,
@@ -315,6 +532,7 @@ app.get('/api/spotify/me/player/recently-played', async (req, res) => {
       .filter(item => item.track)
       .map(item => ({
         id: item.track.id,
+        uri: item.track.uri,
         name: item.track.name,
         artists: item.track.artists?.map(a => a.name).join(', '),
         album: item.track.album?.name,
@@ -325,6 +543,66 @@ app.get('/api/spotify/me/player/recently-played', async (req, res) => {
       }));
 
     res.json({ tracks, total: allTracks.length });
+  } catch (err) {
+    console.error('❌ Failed to fetch recently played:', err.message);
+    res.status(500).json({ error: 'Failed to fetch recently played' });
+  }
+});
+
+app.get('/api/recently-played', async (req, res) => {
+  const accessToken = getRequestAccessToken(req);
+  if (!accessToken) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    if (req.session?.access_token) {
+      await ensureValidToken(req);
+    }
+
+    const token = req.session?.access_token || accessToken;
+    const response = await axios.get(`${SPOTIFY_API_URL}/me/player/recently-played?limit=50`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    const artistsMap = new Map();
+    const songsMap = new Map();
+
+    for (const item of response.data.items || []) {
+      const track = item.track;
+      if (!track || songsMap.has(track.id)) continue;
+
+      songsMap.set(track.id, {
+        id: track.id,
+        uri: track.uri,
+        name: track.name,
+        artists: (track.artists || []).map(artist => ({
+          id: artist.id,
+          name: artist.name,
+        })),
+        duration: track.duration_ms,
+        previewUrl: track.preview_url,
+        image: track.album?.images?.[0]?.url || null,
+        explicit: track.explicit,
+        popularity: track.popularity,
+        url: track.external_urls?.spotify || null,
+      });
+
+      for (const artist of track.artists || []) {
+        if (!artistsMap.has(artist.id)) {
+          artistsMap.set(artist.id, {
+            id: artist.id,
+            name: artist.name,
+            url: artist.external_urls?.spotify || null,
+          });
+        }
+      }
+    }
+
+    res.json({
+      songs: Array.from(songsMap.values()).slice(0, 50),
+      artists: Array.from(artistsMap.values()).slice(0, 30),
+    });
   } catch (err) {
     console.error('❌ Failed to fetch recently played:', err.message);
     res.status(500).json({ error: 'Failed to fetch recently played' });
@@ -359,6 +637,47 @@ app.get('/api/spotify/playlists', async (req, res) => {
       url: playlist.external_urls?.spotify,
       trackCount: playlist.tracks?.total || 0,
       owner: playlist.owner?.display_name
+    }));
+
+    res.json({ playlists, total: allPlaylists.length });
+  } catch (err) {
+    console.error('❌ Failed to fetch playlists:', err.message);
+    res.status(500).json({ error: 'Failed to fetch playlists' });
+  }
+});
+
+app.get('/api/playlists', async (req, res) => {
+  const accessToken = getRequestAccessToken(req);
+  if (!accessToken) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+
+  try {
+    if (req.session?.access_token) {
+      await ensureValidToken(req);
+    }
+
+    const token = req.session?.access_token || accessToken;
+    const allPlaylists = [];
+    let nextUrl = `${SPOTIFY_API_URL}/me/playlists?limit=50`;
+
+    while (nextUrl) {
+      const response = await axios.get(nextUrl, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      allPlaylists.push(...(response.data.items || []));
+      nextUrl = response.data.next;
+    }
+
+    const playlists = allPlaylists.map(playlist => ({
+      id: playlist.id,
+      name: playlist.name,
+      desc: playlist.description || '',
+      image: playlist.images?.[0]?.url || null,
+      url: playlist.external_urls?.spotify || null,
+      trackCount: playlist.tracks?.total || 0,
+      owner: playlist.owner?.display_name || 'Unknown',
     }));
 
     res.json({ playlists, total: allPlaylists.length });
@@ -407,25 +726,31 @@ app.get('/api/spotify/recently-played-artists', async (req, res) => {
 
 // Get songs from a specific playlist
 async function handlePlaylistTracksRequest(req, res, playlistId) {
-  if (!req.session.access_token) {
+  const accessToken = getRequestAccessToken(req);
+  if (!accessToken) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
 
   try {
-    await ensureValidToken(req);
+    if (req.session?.access_token) {
+      await ensureValidToken(req);
+    }
+    const token = req.session?.access_token || accessToken;
     
-    const playlistItems = await fetchAllPlaylistTracks(req.session.access_token, playlistId);
+    const playlistItems = await fetchAllPlaylistTracks(token, playlistId);
     const trackIds = playlistItems
       .map(item => item.track?.id)
       .filter(Boolean);
-    const audioFeatures = await fetchAudioFeatures(req.session.access_token, trackIds);
+    const audioFeatures = await fetchAudioFeatures(token, trackIds);
 
     const tracks = playlistItems
-      .filter(item => item.track) // Filter out null tracks
-      .map(item => ({
-        id: item.track.id,
+      .filter(item => item.track) // Filter out unavailable tracks
+      .map((item, index) => ({
+        id: item.track.id || item.track.uri || `${playlistId}-${index}`,
+        uri: item.track.uri,
         name: item.track.name,
         artists: item.track.artists?.map(a => a.name).join(', '),
+        album: item.track.album?.name,
         duration: item.track.duration_ms,
         previewUrl: item.track.preview_url,
         image: item.track.album?.images?.[0]?.url,
@@ -436,8 +761,12 @@ async function handlePlaylistTracksRequest(req, res, playlistId) {
 
     res.json({ tracks, total: playlistItems.length });
   } catch (err) {
-    console.error('❌ Failed to fetch playlist tracks:', err.message);
-    res.status(500).json({ error: 'Failed to fetch playlist tracks' });
+    const status = err.response?.status || 500;
+    const spotifyError = err.response?.data?.error;
+    const message = spotifyError?.message || err.response?.data?.error_description || err.message || 'Failed to fetch playlist tracks';
+
+    console.error('❌ Failed to fetch playlist tracks:', status, message);
+    res.status(status).json({ error: message });
   }
 }
 

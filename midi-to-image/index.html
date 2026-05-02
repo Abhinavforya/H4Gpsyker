@@ -32,12 +32,13 @@
       <a href="#upload" class="nav-link">Upload</a>
       <a href="#canvas-wrap" class="nav-link">Canvas</a>
       <a href="#controls" class="nav-link">Controls</a>
-      <a href="https://spotifybackend-theta.vercel.app/api/login?next=/midi-to-image/index.html" class="spotify-btn" id="spotifyAuthBtn" title="Connect to Spotify">
+      <a href="/auth/spotify" class="spotify-btn" id="spotifyAuthBtn" title="Connect to Spotify">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
           <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15.6 10.561 19.021 12.84c.361.21.601.541.301.961zm.12-3.36C15.312 8.887 8.59 8.75 5.16 9.771c-.589.15-1.159-.355-1.309-.945-.15-.589.355-1.159.945-1.309 3.59-.981 10.28-.824 14.514 2.101.479.355.601 1.08.246 1.559-.355.479-1.08.599-1.559.245z"/>
         </svg>
         Connect Spotify
       </a>
+      <a href="/cozy-player" class="nav-link" title="Open Cozy Player">Cozy Player</a>
     </nav>
     <!-- Spotify Profile (hidden by default) -->
     <div class="spotify-profile-icon" id="spotifyProfileIcon" style="display: none;">
@@ -113,6 +114,17 @@
             <div class="skeleton-loader"></div>
             <div class="skeleton-loader"></div>
             <div class="skeleton-loader"></div>
+          </div>
+          <div class="playlist-mini-player" id="playlistMiniPlayer" hidden>
+            <img id="miniPlayerImage" class="mini-player-image" src="" alt="Album cover">
+            <div class="mini-player-main">
+              <div class="mini-player-kicker">Selected track</div>
+              <div class="mini-player-title" id="miniPlayerTitle">Choose a song</div>
+              <div class="mini-player-artist" id="miniPlayerArtist"></div>
+              <audio id="miniPlayerAudio" class="mini-player-audio" controls></audio>
+              <div class="mini-player-features" id="miniPlayerFeatures"></div>
+            </div>
+            <button id="convertPreviewSongBtn" class="btn-primary mini-player-convert">Generate Art</button>
           </div>
           <div class="playlist-modal-footer">
             <button id="convertSelectedSongsBtn" class="btn-primary">🎨 Convert Selected Songs to ASCII Art</button>

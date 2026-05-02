@@ -1,6 +1,7 @@
 // Simple frontend logic for auth display and playlist dropdown
 (function(){
   const API_BASE = window.SPOTIFY_API_BASE_URL || '';
+  const BACKEND_BASE = window.SPOTIFY_SITE_URL || (window.location && /^https?:$/.test(window.location.protocol) ? window.location.origin : 'http://localhost:8000');
   const authBtn = document.getElementById('auth-btn');
   const authStatus = document.getElementById('auth-status');
   const dropdownToggle = document.getElementById('dropdown-toggle');
@@ -23,23 +24,29 @@
       return null;
     }
 
-    localStorage.setItem('spotify_access_token', token);
     currentUrl.searchParams.delete('token');
     window.history.replaceState({}, document.title, `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
-    return token;
+    return null;
   }
 
-  function getAccessToken(){
-    return consumeAccessTokenFromUrl() || localStorage.getItem('spotify_access_token');
+  async function getAccessToken(){
+    consumeAccessTokenFromUrl();
+    try {
+      const resp = await fetch(`${BACKEND_BASE.replace(/\/$/, '')}/api/spotify/token`, { credentials: 'include' });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      return data.access_token || null;
+    } catch (err) {
+      return null;
+    }
   }
 
-  // Demo-friendly: try to read a token from localStorage (backend must store it there after redirect)
-  function isConnected(){
-    return !!getAccessToken();
+  async function isConnected(){
+    return !!(await getAccessToken());
   }
 
-  function updateAuthUI(){
-    if(isConnected()){
+  async function updateAuthUI(){
+    if(await isConnected()){
       authStatus.textContent = 'Connected';
       authBtn.textContent = 'Disconnect';
     } else {
@@ -49,12 +56,14 @@
   }
 
   authBtn.addEventListener('click', ()=>{
-    if(isConnected()){
-      localStorage.removeItem('spotify_access_token');
+    isConnected().then(async connected => {
+      if(connected){
+      await fetch(`${BACKEND_BASE.replace(/\/$/, '')}/api/spotify/logout`, { method: 'POST', credentials: 'include' }).catch(()=>{});
       updateAuthUI();
     } else {
-      window.location.href = '/auth/spotify';
+      window.location.href = `${BACKEND_BASE.replace(/\/$/, '')}/auth/spotify`;
     }
+    });
   });
 
   dropdownToggle.addEventListener('click', ()=>{
@@ -81,12 +90,14 @@
   // Mock fetch — replace with a real fetch to your backend: /api/spotify/playlists
   async function fetchPlaylists(){
     const token = getAccessToken();
+    const resolvedToken = await token;
 
     // If connected and real endpoint exists, call it. Fallback to mocked data.
     try{
-      if(token){
+      if(resolvedToken){
         const resp = await fetch(apiUrl('/api/playlists'), {
-          headers: { Authorization: `Bearer ${token}` }
+          credentials: 'include',
+          headers: { Authorization: `Bearer ${resolvedToken}` }
         });
         if(resp.ok){
           const data = await resp.json();

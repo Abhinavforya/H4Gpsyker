@@ -222,6 +222,8 @@ const MidiParser = (() => {
 
     const maxTick = notes.length ? Math.max(...notes.map(n => n.endTick)) : 0;
     const bpm     = 60000000 / globalTempo;
+    const ticksPerBeat = division & 0x8000 ? 480 : division;
+    const duration = (maxTick / ticksPerBeat) * (60 / bpm);
 
     return {
       header,
@@ -230,6 +232,7 @@ const MidiParser = (() => {
       bpm: Math.round(bpm),
       totalNotes: notes.length,
       maxTick,
+      duration,
       uniquePitches: [...new Set(notes.map(n => n.note))].sort((a,b) => a-b),
     };
   }

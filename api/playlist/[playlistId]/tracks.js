@@ -60,10 +60,12 @@ export default async function handler(req, res) {
 
     const normalizedTracks = tracks
       .filter((item) => item.track)
-      .map((item) => ({
-        id: item.track.id,
+      .map((item, index) => ({
+        id: item.track.id || item.track.uri || `${playlistId}-${index}`,
+        uri: item.track.uri,
         name: item.track.name,
         artists: item.track.artists?.map((artist) => artist.name).join(', '),
+        album: item.track.album?.name,
         duration: item.track.duration_ms,
         previewUrl: item.track.preview_url,
         image: item.track.album?.images?.[0]?.url || null,
@@ -74,6 +76,6 @@ export default async function handler(req, res) {
 
     res.status(200).json({ tracks: normalizedTracks });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to fetch playlist tracks' });
+    res.status(500).json({ error: err.message || 'Failed to fetch playlist tracks' });
   }
 }
