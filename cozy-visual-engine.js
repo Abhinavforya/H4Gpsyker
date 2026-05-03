@@ -27,6 +27,7 @@ class CozyVisualEngine {
       positionMs: 0,
       durationMs: 0,
       isPlaying: false,
+      updatedAt: this.getClockTime(),
     };
     this.liveNotes = [];
     this.liveSeed = 42;
@@ -40,6 +41,7 @@ class CozyVisualEngine {
       'spectrum',
       'spiral',
       'reactive',
+      'mood-biome',
       'live-paint',
       'live-ascii',
     ];
@@ -95,6 +97,9 @@ class CozyVisualEngine {
             break;
           case 'reactive':
             this.renderReactive(p, w, h);
+            break;
+          case 'mood-biome':
+            this.renderMoodBiome(p, w, h);
             break;
           case 'live-paint':
             this.renderLivePaint(p, w, h);
@@ -161,6 +166,7 @@ class CozyVisualEngine {
       positionMs: Math.max(0, Number(positionMs) || 0),
       durationMs: Math.max(0, Number(durationMs) || 0),
       isPlaying: !!isPlaying,
+      updatedAt: this.getClockTime(),
     };
   }
 
@@ -210,6 +216,55 @@ class CozyVisualEngine {
         accent: [244, 114, 182],
         tertiary: [14, 165, 233],
       };
+    }
+  }
+
+  getClockTime() {
+    return (typeof performance !== 'undefined' && performance.now)
+      ? performance.now()
+      : Date.now();
+  }
+
+  clamp(value, min = 0, max = 1) {
+    return Math.max(min, Math.min(max, Number(value) || 0));
+  }
+
+  mixColor(a, b, amount) {
+    const t = this.clamp(amount);
+    return [
+      Math.round(a[0] + (b[0] - a[0]) * t),
+      Math.round(a[1] + (b[1] - a[1]) * t),
+      Math.round(a[2] + (b[2] - a[2]) * t),
+    ];
+  }
+
+  getPlaybackMetrics() {
+    const durationMs = this.playback.durationMs || this.trackContext?.duration_ms || this.trackContext?.duration || 180000;
+    const durationSec = Math.max(1, durationMs / 1000);
+    const basePositionSec = Math.max(0, (this.playback.positionMs || 0) / 1000);
+    const driftSec = this.playback.isPlaying
+      ? Math.max(0, (this.getClockTime() - (this.playback.updatedAt || this.getClockTime())) / 1000)
+      : 0;
+    const positionSec = Math.min(durationSec, basePositionSec + driftSec);
+    const tempo = Math.max(60, Math.min(190, this.audioFeatures.tempo || 120));
+    const beatWave = Math.sin(positionSec * (tempo / 60) * Math.PI * 2) * 0.5 + 0.5;
+
+    return {
+      durationSec,
+      positionSec,
+      progress: this.clamp(positionSec / durationSec),
+      tempo,
+      beatPulse: Math.pow(beatWave, 5),
+    };
+  }
+
+  drawVerticalGradient(p, w, h, topColor, bottomColor, steps = 72) {
+    p.noStroke();
+    for (let i = 0; i < steps; i++) {
+      const t = i / Math.max(1, steps - 1);
+      const color = this.mixColor(topColor, bottomColor, t);
+      p.fill(...color);
+      p.rect(0, (h * i) / steps, w, Math.ceil(h / steps) + 1);
     }
   }
 
@@ -527,6 +582,166 @@ class CozyVisualEngine {
 
       p.line(x1, y1, x2, y2);
     }
+  }
+
+  /**
+   * RENDER MODE: Mood Biome
+   * A living landscape grown from Spotify metadata and playback progress.
+   */
+  renderMoodBiome(p, w, h) {
+    const {
+      energy,
+      valence,
+      danceability,
+      acousticness,
+      instrumentalness,
+      liveness,
+      speechiness,
+    } = this.audioFeatures;
+    const palette = this.getColorPalette();
+    const frame = this.animationFrame;
+    const metrics = this.getPlaybackMetrics();
+    const breath = Math.sin(frame * 0.006 + metrics.progress * Math.PI * 2) * 0.5 + 0.5;
+    const pulse = 0.72 + metrics.beatPulse * (0.22 + energy * 0.18);
+
+    const skyTop = this.mixColor([4, 7, 20], valence > 0.55 ? [35, 21, 58] : [6, 25, 52], valence);
+    const skyBottom = this.mixColor([9, 19, 43], [44, 88, 72], valence * 0.68 + acousticness * 0.18);
+    const horizonGlow = this.mixColor(palette.primary, [247, 172, 94], valence * 0.64);
+    const soilBase = this.mixColor([6, 12, 25], palette.secondary, acousticness * 0.22 + valence * 0.08);
+
+    this.drawVerticalGradient(p, w, h, skyTop, skyBottom);
+
+    p.noStroke();
+    p.fill(...horizonGlow, 22 + energy * 36);
+    p.rect(0, h * 0.42, w, h * 0.24);
+
+    p.blendMode(p.ADD);
+    const lightX = w * (0.2 + ((this.liveSeed % 983) / 983) * 0.6);
+    const lightY = h * (0.16 + ((this.liveSeed % 389) / 389) * 0.12);
+    for (let ring = 8; ring > 0; ring--) {
+      const radius = (18 + ring * 24 + energy * 32) * pulse;
+      p.fill(...horizonGlow, 7 + ring * 2 + metrics.beatPulse * 10);
+      p.ellipse(lightX, lightY, radius, radius);
+    }
+
+    const starRand = this.createRandom(this.liveSeed ^ 0x51A7);
+    const starCount = Math.floor(24 + instrumentalness * 72 + (1 - valence) * 26);
+    for (let i = 0; i < starCount; i++) {
+      const x = starRand() * w;
+      const y = starRand() * h * 0.42;
+      const size = 0.8 + starRand() * (2.4 + instrumentalness * 2);
+      const shimmer = Math.sin(frame * (0.012 + starRand() * 0.018) + i * 1.7) * 0.5 + 0.5;
+      p.fill(...palette.tertiary, 35 + shimmer * 95);
+      p.ellipse(x, y, size * (0.8 + shimmer), size * (0.8 + shimmer));
+    }
+    p.blendMode(p.BLEND);
+
+    const terrainLayers = 4 + Math.floor(acousticness * 3 + instrumentalness * 2);
+    for (let layer = 0; layer < terrainLayers; layer++) {
+      const layerNorm = layer / Math.max(1, terrainLayers - 1);
+      const baseY = h * (0.5 + layerNorm * 0.34);
+      const amp = h * (0.026 + layerNorm * 0.05 + energy * 0.02);
+      const freq = 0.0026 + layerNorm * 0.0054 + danceability * 0.0018;
+      const speed = (0.0012 + danceability * 0.0018) * (layer % 2 === 0 ? 1 : -1);
+      const color = this.mixColor(soilBase, palette.primary, 0.06 + layerNorm * 0.18 + valence * 0.06);
+
+      p.noStroke();
+      p.fill(...color, 126 + layerNorm * 78);
+      p.beginShape();
+      p.vertex(-24, h + 24);
+      for (let x = -24; x <= w + 24; x += 18) {
+        const noiseLift = (p.noise(x * freq, layer * 9.3 + metrics.progress * 5 + frame * speed) - 0.5) * amp * 1.7;
+        const waveLift = Math.sin(x * freq * 9 + frame * speed * 28 + layer * 1.7) * amp * 0.46;
+        p.vertex(x, baseY + noiseLift + waveLift);
+      }
+      p.vertex(w + 24, h + 24);
+      p.endShape(p.CLOSE);
+    }
+
+    p.blendMode(p.ADD);
+    const streamCount = 2 + Math.floor(danceability * 5 + liveness * 2);
+    for (let stream = 0; stream < streamCount; stream++) {
+      const lane = stream / Math.max(1, streamCount - 1);
+      const yBase = h * (0.52 + lane * 0.3);
+      const color = [palette.primary, palette.secondary, palette.accent, palette.tertiary][stream % 4];
+      p.noFill();
+      p.stroke(...color, 24 + energy * 42);
+      p.strokeWeight(0.9 + energy * 2.4 + lane * 0.8);
+      p.beginShape();
+      for (let x = -20; x <= w + 20; x += 16) {
+        const tempoFlow = metrics.positionSec * (0.3 + metrics.tempo / 220);
+        const y = yBase
+          + Math.sin(x * 0.014 + tempoFlow + stream * 1.9) * (10 + danceability * 22)
+          + Math.sin(x * 0.004 - frame * 0.008 + stream) * (6 + acousticness * 16);
+        p.vertex(x, y);
+      }
+      p.endShape();
+    }
+
+    const bloomRand = this.createRandom(this.liveSeed ^ 0xB100);
+    const bloomCount = Math.floor(36 + energy * 72 + acousticness * 28 + instrumentalness * 34);
+    for (let i = 0; i < bloomCount; i++) {
+      const bornAt = bloomRand();
+      const reveal = this.clamp((metrics.progress - bornAt) * 9 + 0.2);
+      if (reveal <= 0) continue;
+
+      const baseX = bloomRand() * w;
+      const ground = bloomRand();
+      const baseY = h * (0.55 + ground * 0.36);
+      const stemHeight = (18 + bloomRand() * (52 + acousticness * 70 + energy * 24)) * reveal;
+      const sway = Math.sin(frame * (0.006 + danceability * 0.014) + i * 1.31) * (4 + danceability * 15);
+      const headX = baseX + sway;
+      const headY = baseY - stemHeight;
+      const velocity = 0.55 + bloomRand() * 0.45;
+      const petalCount = 3 + Math.floor(valence * 5 + energy * 3);
+      const size = (4 + velocity * 10 + energy * 5 + metrics.beatPulse * 5) * reveal;
+      const stemColor = this.mixColor(palette.secondary, [210, 255, 221], acousticness * 0.2);
+      const bloomColor = [palette.primary, palette.secondary, palette.accent, palette.tertiary][Math.floor(bloomRand() * 4)];
+
+      p.blendMode(p.BLEND);
+      p.stroke(...stemColor, 48 + reveal * 118);
+      p.strokeWeight(0.8 + acousticness * 1.8);
+      p.line(baseX, baseY, headX, headY);
+
+      p.noStroke();
+      p.blendMode(p.ADD);
+      for (let petal = 0; petal < petalCount; petal++) {
+        const angle = (petal / petalCount) * Math.PI * 2 + breath * 0.5 + i;
+        p.push();
+        p.translate(headX + Math.cos(angle) * size * 0.42, headY + Math.sin(angle) * size * 0.32);
+        p.rotate(angle);
+        p.fill(...bloomColor, 36 + reveal * 118);
+        p.ellipse(0, 0, size * (1.2 + energy * 0.35), size * 0.52);
+        p.pop();
+      }
+      p.fill(...horizonGlow, 45 + reveal * 130);
+      p.ellipse(headX, headY, size * 0.58, size * 0.58);
+    }
+
+    if (speechiness > 0.12) {
+      const glyphRand = this.createRandom(this.liveSeed ^ 0xA5C11);
+      const glyphs = '.:+*#';
+      const glyphCount = Math.floor(12 + speechiness * 74);
+      p.blendMode(p.ADD);
+      p.textFont('Space Mono');
+      p.textAlign(p.CENTER, p.CENTER);
+      p.textSize(9 + speechiness * 9);
+      for (let i = 0; i < glyphCount; i++) {
+        const x = (glyphRand() * w + metrics.positionSec * (12 + danceability * 28) + i * 17) % w;
+        const y = h * (0.2 + glyphRand() * 0.58);
+        const char = glyphs[Math.floor(glyphRand() * glyphs.length)];
+        const alpha = 20 + speechiness * 90 + metrics.beatPulse * 35;
+        p.fill(...palette.accent, alpha);
+        p.text(char, x, y + Math.sin(frame * 0.014 + i) * 10);
+      }
+    }
+
+    const playX = metrics.progress * w;
+    p.blendMode(p.BLEND);
+    p.stroke(255, 255, 255, 30 + metrics.beatPulse * 65);
+    p.strokeWeight(1);
+    p.line(playX, h * 0.13, playX, h * 0.94);
+    p.noStroke();
   }
 
   hashString(value) {

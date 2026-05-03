@@ -488,6 +488,54 @@ html, body {
   backdrop-filter: blur(16px);
 }
 
+.art-workflow-panel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid rgba(96, 165, 250, 0.24);
+  border-radius: 1rem;
+  background:
+    linear-gradient(135deg, rgba(96, 165, 250, 0.12), rgba(244, 114, 182, 0.08)),
+    rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+}
+
+.art-workflow-kicker {
+  margin-bottom: 0.35rem;
+  color: var(--accent-light);
+  font-family: 'Space Mono', monospace;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.art-workflow-status {
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.btn-gallery {
+  flex: 0 0 auto;
+  min-height: 2.35rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0.65rem;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform var(--transition-fast), background var(--transition-fast);
+}
+
+.btn-gallery:hover {
+  background: rgba(167, 139, 250, 0.16);
+  transform: translateY(-1px);
+}
+
 /* Progress Section */
 .progress-section {
   display: flex;
@@ -1027,6 +1075,15 @@ html, body {
 
   .audio-features {
     grid-template-columns: 1fr;
+  }
+
+  .art-workflow-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .btn-gallery {
+    width: 100%;
   }
 
   .library-header {

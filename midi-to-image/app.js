@@ -14,6 +14,7 @@ let asciiAnimTimer = null;
 let asciiAnimFrames = null;
 let asciiAnimIdx = 0;
 let asciiAnimRunning = false;
+let lastLiveRenderAt = 0;
 
 // Agent modules
 let memory = null;
@@ -28,6 +29,7 @@ const TRACK_COLORS = [
 // Initialize agent modules on page load
 document.addEventListener('DOMContentLoaded', () => {
   memory = new Memory();
+  window.memory = memory;
 });
 
 /* ── Drag & Drop ── */
@@ -270,10 +272,7 @@ function onMidiLoaded(data, filename) {
 
   setMidiData(clipped);
   window.midiData = clipped;
-  document.getElementById('controls').classList.remove('hidden');
-  document.getElementById('canvas-wrap').classList.remove('hidden');
-  document.getElementById('ascii-wrap').classList.remove('hidden');
-  document.getElementById('tracksPanel').classList.remove('hidden');
+  showVisualizationPanels();
 
   renderStats(clipped);
   renderTracks(clipped);
@@ -281,11 +280,13 @@ function onMidiLoaded(data, filename) {
   renderAscii();
 
   // Log interaction in memory
-  memory.logInteraction('midiLoaded', {
-    filename,
-    noteCount: clipped.totalNotes,
-    duration: clipped.duration,
-  });
+  if (memory) {
+    memory.logInteraction('midiLoaded', {
+      filename,
+      noteCount: clipped.totalNotes,
+      duration: clipped.duration,
+    });
+  }
 
   const src = clipped.sourceType === 'audio'
     ? 'audio analysis'
@@ -320,6 +321,7 @@ function stat(label, val) {
 function getSourceLabel(data) {
   if (data.sourceType === 'audio') return 'Audio→MIDI';
   if (data.sourceType === 'spotify') return 'Spotify→MIDI';
+  if (data.sourceType === 'live') return 'Live Audio→MIDI';
   return `MIDI ${data.header?.format ?? ''}`;
 }
 
@@ -428,7 +430,7 @@ document.getElementById('asciiCopyBtn').addEventListener('click', () => {
 });
 
 /* ── p5 Generate ── */
-function generateImage() {
+function generateImage(options = {}) {
   if (!parsedMidi) return;
   const opts = getOpts();
 
@@ -437,7 +439,9 @@ function generateImage() {
   createSketch(parsedMidi, opts);
   
   // Log visual generation
-  memory.logModeUsage(opts.visualMode);
+  if (options.logUsage !== false && memory) {
+    memory.logModeUsage(opts.visualMode);
+  }
 }
 
 function getOpts() {
@@ -514,8 +518,37 @@ function setMidiData(data) {
   window.midiData = data;
 }
 
+function showVisualizationPanels() {
+  document.getElementById('controls').classList.remove('hidden');
+  document.getElementById('canvas-wrap').classList.remove('hidden');
+  document.getElementById('ascii-wrap').classList.remove('hidden');
+  document.getElementById('tracksPanel').classList.remove('hidden');
+}
+
+function updateLiveMidiCapture(data, options = {}) {
+  if (!data) return;
+
+  setMidiData(data);
+  showVisualizationPanels();
+  renderStats(data);
+  renderTracks(data);
+
+  const now = Date.now();
+  const shouldRender = options.final || now - lastLiveRenderAt > 1200;
+  if (data.notes?.length && shouldRender) {
+    generateImage({ logUsage: false });
+    renderAscii(false);
+    lastLiveRenderAt = now;
+  }
+
+  if (options.final && window.showToast) {
+    showToast(`✓ Live capture ready: ${data.notes?.length || 0} notes`, 'success');
+  }
+}
+
 window.generateAsciiArt = () => renderAscii(false);
 window.generateP5Visualization = () => generateImage();
 window.loadMidiDataFromSpotify = (data, filename) => onMidiLoaded(data, filename || data.name || 'Spotify track');
 window.setMidiData = setMidiData;
+window.updateLiveMidiCapture = updateLiveMidiCapture;
 window.showToast = showToast;

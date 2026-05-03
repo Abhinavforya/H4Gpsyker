@@ -7,6 +7,9 @@
 
 class CozyPlayerController {
   static STORAGE_KEY = 'cozy-player-state-v1';
+  static ART_WORKFLOW_KEY = 'cozy-player-art-workflow-v1';
+  static ART_CAPTURE_SECONDS = 20;
+  static ART_TRIGGER_EVERY = 5;
 
   getBackendBaseUrl() {
     if (window.SPOTIFY_SITE_URL) {
@@ -32,6 +35,9 @@ class CozyPlayerController {
     this.durationMs = 0;
     this.progressTimer = null;
     this.persistedState = this.loadPersistedState();
+    this.artWorkflowState = this.loadArtWorkflowState();
+    this.autoArtworkPendingTrackId = null;
+    this.autoArtworkSaving = false;
     
     // DOM Elements
     this.authBtn = document.getElementById('auth-btn');
@@ -57,6 +63,8 @@ class CozyPlayerController {
     this.playlistTrackList = document.getElementById('playlist-track-list');
     this.statusPanel = document.getElementById('status-panel');
     this.deviceHelp = document.getElementById('device-help');
+    this.artWorkflowStatus = document.getElementById('art-workflow-status');
+    this.artGalleryLink = document.getElementById('art-gallery-link');
     
     this.init();
   }
@@ -64,6 +72,7 @@ class CozyPlayerController {
   async init() {
     this.setupEventListeners();
     this.hydratePersistedState();
+    this.updateArtWorkflowUI();
     this.updateAuthUI();
     this.startProgressTimer();
     await this.loadAccessToken();
@@ -94,6 +103,11 @@ class CozyPlayerController {
       }
       this.persistState();
     });
+    if (this.artGalleryLink) {
+      this.artGalleryLink.addEventListener('click', () => {
+        window.location.href = '/artworks';
+      });
+    }
   }
 
   loadPersistedState() {
@@ -152,6 +166,36 @@ class CozyPlayerController {
       this.isPlaying = false;
       this.updatePlayButton();
       this.showStatusMessage('Restored your last cozy player selection. Press play when you are ready.');
+    }
+  }
+
+  loadArtWorkflowState() {
+    try {
+      const rawState = localStorage.getItem(CozyPlayerController.ART_WORKFLOW_KEY);
+      const state = rawState ? JSON.parse(rawState) : {};
+      return {
+        playedCount: Number(state.playedCount) || 0,
+        lastTrackId: state.lastTrackId || null,
+        savedCount: Number(state.savedCount) || 0,
+        lastSavedAt: state.lastSavedAt || null,
+        lastSavedTrack: state.lastSavedTrack || null,
+      };
+    } catch (error) {
+      console.warn('[Cozy] Unable to read art workflow state:', error);
+      return { playedCount: 0, lastTrackId: null, savedCount: 0 };
+    }
+  }
+
+  persistArtWorkflowState(extraState = {}) {
+    try {
+      this.artWorkflowState = {
+        ...this.artWorkflowState,
+        ...extraState,
+      };
+      localStorage.setItem(CozyPlayerController.ART_WORKFLOW_KEY, JSON.stringify(this.artWorkflowState));
+      this.updateArtWorkflowUI();
+    } catch (error) {
+      console.warn('[Cozy] Unable to save art workflow state:', error);
     }
   }
 
@@ -324,6 +368,9 @@ class CozyPlayerController {
 
     // Track changed - fetch audio features
     if (!this.currentTrack || this.currentTrack.id !== current_track.id) {
+      if (is_playing) {
+        this.trackSpotifyPlaybackForArt(current_track);
+      }
       this.currentTrack = current_track;
       await this.updateTrackInfo(current_track);
     }
@@ -367,6 +414,9 @@ class CozyPlayerController {
     // Fetch audio features from Spotify API
     if (track.id) {
       await this.fetchAudioFeatures(track.id);
+      if (this.autoArtworkPendingTrackId === track.id) {
+        await this.saveAutomaticSpotifyArtwork(track);
+      }
     }
   }
 
@@ -416,6 +466,87 @@ class CozyPlayerController {
       }
       this.persistState();
     }
+  }
+
+  trackSpotifyPlaybackForArt(track) {
+    const normalized = this.normalizeTrack(track);
+    const trackId = normalized?.id || normalized?.uri;
+    if (!trackId || this.artWorkflowState.lastTrackId === trackId) return;
+
+    const playedCount = (Number(this.artWorkflowState.playedCount) || 0) + 1;
+    const shouldCapture = playedCount % CozyPlayerController.ART_TRIGGER_EVERY === 0;
+
+    this.persistArtWorkflowState({
+      playedCount,
+      lastTrackId: trackId,
+    });
+
+    if (shouldCapture) {
+      this.autoArtworkPendingTrackId = trackId;
+      this.showStatusMessage(`Track ${playedCount}: saving a ${CozyPlayerController.ART_CAPTURE_SECONDS}s MIDI/art capture after audio features load.`);
+    } else {
+      const remaining = CozyPlayerController.ART_TRIGGER_EVERY - (playedCount % CozyPlayerController.ART_TRIGGER_EVERY);
+      this.updateArtWorkflowUI(`Auto art in ${remaining} track${remaining === 1 ? '' : 's'}.`);
+    }
+  }
+
+  async saveAutomaticSpotifyArtwork(track) {
+    const normalized = this.normalizeTrack(track);
+    const trackId = normalized?.id || normalized?.uri;
+    if (!trackId || this.autoArtworkSaving) return;
+
+    this.autoArtworkSaving = true;
+    this.autoArtworkPendingTrackId = null;
+
+    try {
+      const payload = {
+        track: this.serializeTrackForStorage(normalized),
+        features: this.audioFeatures || normalized.audioFeatures || this.getFallbackFeatures(normalized),
+        captureSeconds: CozyPlayerController.ART_CAPTURE_SECONDS,
+        triggerEvery: CozyPlayerController.ART_TRIGGER_EVERY,
+        playedCount: this.artWorkflowState.playedCount,
+      };
+
+      const response = await fetch('/api/artworks/spotify-capture', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error('Artwork save failed');
+      }
+
+      const data = await response.json();
+      const artwork = data.artwork;
+      this.persistArtWorkflowState({
+        savedCount: (Number(this.artWorkflowState.savedCount) || 0) + 1,
+        lastSavedAt: artwork?.createdAt || new Date().toISOString(),
+        lastSavedTrack: payload.track.name,
+      });
+      this.showStatusMessage(`Saved automatic Spotify artwork for ${payload.track.name}. Open the gallery to view it.`);
+    } catch (error) {
+      console.error('[Cozy] Automatic artwork save failed:', error);
+      this.showStatusMessage('Automatic artwork save failed. The player will keep counting tracks.');
+      this.updateArtWorkflowUI('Last save failed.');
+    } finally {
+      this.autoArtworkSaving = false;
+    }
+  }
+
+  updateArtWorkflowUI(extraMessage = '') {
+    if (!this.artWorkflowStatus) return;
+
+    const playedCount = Number(this.artWorkflowState.playedCount) || 0;
+    const savedCount = Number(this.artWorkflowState.savedCount) || 0;
+    const modulo = playedCount % CozyPlayerController.ART_TRIGGER_EVERY;
+    const remaining = modulo === 0 ? CozyPlayerController.ART_TRIGGER_EVERY : CozyPlayerController.ART_TRIGGER_EVERY - modulo;
+    const savedText = this.artWorkflowState.lastSavedTrack
+      ? `Last saved: ${this.artWorkflowState.lastSavedTrack}.`
+      : 'No automatic saves yet.';
+
+    this.artWorkflowStatus.textContent = extraMessage || `${playedCount} tracks counted. Next save in ${remaining}. ${savedCount} saved. ${savedText}`;
   }
 
   /**

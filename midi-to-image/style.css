@@ -201,6 +201,102 @@ h1 {
   font-family: 'Space Mono', monospace; font-size: 0.85rem;
 }
 
+/* -- Live Capture -- */
+.live-capture-section {
+  margin-bottom: 2.5rem;
+}
+
+.live-capture-panel {
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-lg);
+  padding: 1.4rem;
+  backdrop-filter: blur(12px);
+}
+
+.live-capture-main {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(220px, 1fr) auto;
+  gap: 1rem;
+  align-items: end;
+  margin-bottom: 1rem;
+}
+
+.live-input-card label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.7rem;
+}
+
+.live-meter {
+  height: 46px;
+  border: 1px solid var(--surface-border);
+  border-radius: 8px;
+  background:
+    linear-gradient(90deg, rgba(52,211,153,0.08), rgba(244,114,182,0.08)),
+    rgba(255,255,255,0.04);
+  overflow: hidden;
+  position: relative;
+}
+
+.live-meter::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(255,255,255,0.08) 0,
+    rgba(255,255,255,0.08) 1px,
+    transparent 1px,
+    transparent 18px
+  );
+  pointer-events: none;
+}
+
+.live-meter-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent2), var(--accent), var(--accent3));
+  box-shadow: 0 0 24px rgba(52,211,153,0.28);
+  transition: width 0.08s linear;
+}
+
+.live-status {
+  min-width: 180px;
+  color: var(--text-muted);
+  font-family: 'Space Mono', monospace;
+  font-size: 0.82rem;
+  text-align: right;
+  align-self: center;
+}
+
+.live-capture-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+}
+
+.live-capture-actions .btn-primary,
+.live-capture-actions .btn-secondary {
+  min-height: 42px;
+}
+
+.live-capture-stats {
+  margin: 1rem -1.4rem -1.4rem;
+  border-top: 1px solid var(--surface-border);
+}
+
+button:disabled,
+select:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+  transform: none !important;
+}
+
 /* ── Section Title ── */
 .section-title {
   font-size: 1.4rem; font-weight: 700;
@@ -1605,6 +1701,16 @@ footer {
 }
 
 @media (max-width: 768px) {
+  .live-capture-main {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .live-status {
+    min-width: 0;
+    text-align: left;
+  }
+
   .spotify-welcome-text h1 {
     font-size: 1.8rem;
   }

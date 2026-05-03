@@ -8,6 +8,7 @@ const express = require('express');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
+const fs = require('fs');
 const session = require('express-session');
 const axios = require('axios');
 const crypto = require('crypto');
@@ -16,7 +17,6 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 8000;
-app.set('trust proxy', true);
 
 // Spotify OAuth Configuration
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
@@ -29,20 +29,16 @@ const SPOTIFY_API_URL = 'https://api.spotify.com/v1';
 const SESSION_SECRET = process.env.SESSION_SECRET || 'cozy-player-dev-secret';
 const SESSION_MAX_AGE_DAYS = Number(process.env.SESSION_MAX_AGE_DAYS || 7);
 const SESSION_MAX_AGE_MS = SESSION_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
+const ARTWORKS_DIR = path.join(__dirname, 'generated-artworks');
+const ARTWORK_INDEX_FILE = path.join(ARTWORKS_DIR, 'index.json');
 
 if (!process.env.SESSION_SECRET) {
   console.warn('⚠️ SESSION_SECRET is not set. Using a stable development secret.');
 }
 
-function getPublicOrigin(req) {
-  const configuredOrigin = process.env.SPOTIFY_SITE_URL || process.env.NGROK_URL;
-  if (configuredOrigin) {
-    return configuredOrigin.replace(/\/$/, '');
-  }
-
-  const forwardedProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
-  const proto = forwardedProto || req.protocol || 'http';
-  return `${proto}://${req.get('host')}`;
+fs.mkdirSync(ARTWORKS_DIR, { recursive: true });
+if (!fs.existsSync(ARTWORK_INDEX_FILE)) {
+  fs.writeFileSync(ARTWORK_INDEX_FILE, JSON.stringify({ artworks: [] }, null, 2));
 }
 
 function base64UrlEncode(buffer) {
@@ -165,6 +161,288 @@ function getCachedAudioFeatures(trackId) {
 
 function setCachedAudioFeatures(trackId, value) {
   audioFeaturesCache.set(trackId, { cachedAt: Date.now(), value });
+}
+
+function readArtworkIndex() {
+  try {
+    const raw = fs.readFileSync(ARTWORK_INDEX_FILE, 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed.artworks) ? parsed.artworks : [];
+  } catch (error) {
+    console.warn('⚠️ Could not read artwork index:', error.message);
+    return [];
+  }
+}
+
+function writeArtworkIndex(artworks) {
+  fs.writeFileSync(ARTWORK_INDEX_FILE, JSON.stringify({ artworks }, null, 2));
+}
+
+function slugify(value) {
+  return String(value || 'spotify-capture')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 72) || 'spotify-capture';
+}
+
+function hashString(value) {
+  let hash = 0;
+  const text = String(value || '');
+  for (let i = 0; i < text.length; i++) {
+    hash = ((hash << 5) - hash) + text.charCodeAt(i);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+}
+
+function seededRandom(seed) {
+  let state = seed % 2147483647;
+  if (state <= 0) state += 2147483646;
+  return () => {
+    state = state * 16807 % 2147483647;
+    return (state - 1) / 2147483646;
+  };
+}
+
+function normalizeTrackPayload(track = {}) {
+  const artists = Array.isArray(track.artists)
+    ? track.artists.map(artist => artist?.name || artist).filter(Boolean).join(', ')
+    : String(track.artists || 'Unknown Artist');
+
+  return {
+    id: track.id || track.uri || crypto.randomUUID(),
+    uri: track.uri || null,
+    name: track.name || 'Unknown Track',
+    artists,
+    album: typeof track.album === 'string' ? track.album : (track.album?.name || track.album || 'Unknown Album'),
+    duration_ms: track.duration_ms || track.duration || 0,
+    image: track.image || track.album?.images?.[0]?.url || null,
+    popularity: typeof track.popularity === 'number' ? track.popularity : 50,
+  };
+}
+
+function generateMidiCapture(track, features = {}, captureSeconds = 20) {
+  const tempo = Math.max(60, Math.min(190, Number(features.tempo) || 120));
+  const energy = Math.max(0, Math.min(1, Number(features.energy ?? 0.55)));
+  const valence = Math.max(0, Math.min(1, Number(features.valence ?? 0.5)));
+  const danceability = Math.max(0, Math.min(1, Number(features.danceability ?? 0.52)));
+  const acousticness = Math.max(0, Math.min(1, Number(features.acousticness ?? 0.24)));
+  const instrumentalness = Math.max(0, Math.min(1, Number(features.instrumentalness ?? 0.08)));
+  const speechiness = Math.max(0, Math.min(1, Number(features.speechiness ?? 0.08)));
+  const loudness = Number(features.loudness ?? -8);
+  const tpb = 480;
+  const secondsPerTick = (60 / tempo) / tpb;
+  const seed = hashString(`${track.id}|${track.name}|${track.artists}|${tempo}`);
+  const random = seededRandom(seed);
+  const scale = valence >= 0.5
+    ? [0, 2, 4, 5, 7, 9, 11, 12]
+    : [0, 2, 3, 5, 7, 8, 10, 12];
+  const baseNote = Math.max(36, Math.min(78, 42 + Math.round(valence * 22) + Math.round((track.popularity || 50) / 10)));
+  const noteCount = Math.max(28, Math.min(96, Math.round(captureSeconds * (tempo / 60) * (0.72 + danceability * 0.5))));
+  const stepSec = captureSeconds / noteCount;
+  const notes = [];
+
+  for (let i = 0; i < noteCount; i++) {
+    const phrase = i / Math.max(1, noteCount - 1);
+    const offset = Math.floor(random() * scale.length);
+    const octave = Math.floor(random() * (energy > 0.7 ? 3 : 2)) * 12;
+    const wave = Math.round(Math.sin(phrase * Math.PI * 4 + random() * 2) * danceability * 5);
+    const note = Math.max(36, Math.min(96, baseNote + scale[offset] + octave + wave - Math.round(acousticness * 6)));
+    const startSec = i * stepSec;
+    const durationSec = Math.max(0.07, stepSec * (0.42 + energy * 0.36 + instrumentalness * 0.2));
+    const startTick = Math.round(startSec / secondsPerTick);
+    const endTick = Math.round(Math.min(captureSeconds, startSec + durationSec) / secondsPerTick);
+    const accent = i % Math.max(2, Math.round(7 - danceability * 4)) === 0 ? 14 : 0;
+    const loudnessBoost = Math.max(0, Math.min(22, loudness + 24));
+
+    notes.push({
+      note,
+      channel: 0,
+      velocity: Math.max(24, Math.min(127, Math.round(34 + energy * 58 + loudnessBoost + accent - speechiness * 10))),
+      startTick,
+      endTick: Math.max(startTick + 1, endTick),
+      durationTicks: Math.max(1, endTick - startTick),
+      startSec,
+      endSec: Math.min(captureSeconds, startSec + durationSec),
+      durationSec,
+      trackIdx: 0,
+      trackName: 'Spotify 20s Capture',
+      bpm: Math.round(tempo),
+    });
+  }
+
+  const uniquePitches = [...new Set(notes.map(note => note.note))].sort((a, b) => a - b);
+  const maxTick = notes.length ? Math.max(...notes.map(note => note.endTick)) : 0;
+  const avgVelocity = notes.length ? notes.reduce((sum, note) => sum + note.velocity, 0) / notes.length : 0;
+
+  return {
+    name: track.name,
+    header: { format: 0, ntracks: 1, division: tpb },
+    tracks: [{
+      index: 0,
+      name: 'Spotify 20s Capture',
+      noteCount: notes.length,
+      notes,
+      minNote: uniquePitches[0] || 0,
+      maxNote: uniquePitches[uniquePitches.length - 1] || 127,
+      avgVelocity,
+    }],
+    notes,
+    bpm: Math.round(tempo),
+    totalNotes: notes.length,
+    maxTick,
+    uniquePitches,
+    duration: captureSeconds,
+    sourceType: 'spotify-auto',
+    captureSeconds,
+    spotifyTrack: track,
+  };
+}
+
+function generateAsciiFromMidi(midiData, width = 80, height = 32) {
+  const chars = ' .,:;irsXA253hMHGS#9B&@';
+  const grid = Array.from({ length: height }, () => Array(width).fill(' '));
+  const notes = midiData.notes || [];
+  const maxTick = midiData.maxTick || 1;
+
+  for (const note of notes) {
+    const x = Math.max(0, Math.min(width - 1, Math.round((note.startTick / maxTick) * (width - 1))));
+    const y = Math.max(0, Math.min(height - 1, Math.round((1 - note.note / 127) * (height - 1))));
+    const intensity = Math.max(0, Math.min(chars.length - 1, Math.round((note.velocity / 127) * (chars.length - 1))));
+    grid[y][x] = chars[intensity];
+    if (x + 1 < width && note.durationSec > 0.18) grid[y][x + 1] = chars[Math.max(0, intensity - 2)];
+    if (y + 1 < height && note.velocity > 88) grid[y + 1][x] = chars[Math.max(0, intensity - 4)];
+  }
+
+  return grid.map(row => row.join('')).join('\n');
+}
+
+function generateSvgFromMidi(midiData, track, features = {}) {
+  const width = 1200;
+  const height = 720;
+  const notes = midiData.notes || [];
+  const maxTick = midiData.maxTick || 1;
+  const energy = Math.max(0, Math.min(1, Number(features.energy ?? 0.55)));
+  const valence = Math.max(0, Math.min(1, Number(features.valence ?? 0.5)));
+  const palette = valence > 0.58
+    ? ['#1ed760', '#34d399', '#f472b6', '#fbbf24', '#60a5fa']
+    : ['#60a5fa', '#a78bfa', '#34d399', '#f472b6', '#e2e8f0'];
+  const bg = energy > 0.66 ? '#050510' : '#08111f';
+  const circles = notes.map((note, index) => {
+    const x = Math.round((note.startTick / maxTick) * (width - 120) + 60);
+    const y = Math.round((1 - note.note / 127) * (height - 180) + 80);
+    const radius = (4 + (note.velocity / 127) * 22 + (note.durationSec || 0) * 8).toFixed(2);
+    const color = palette[note.note % palette.length];
+    const opacity = (0.38 + (note.velocity / 127) * 0.58).toFixed(2);
+    const line = index > 0
+      ? `<line x1="${Math.round(((notes[index - 1].startTick || 0) / maxTick) * (width - 120) + 60)}" y1="${Math.round((1 - (notes[index - 1].note || 60) / 127) * (height - 180) + 80)}" x2="${x}" y2="${y}" stroke="${color}" stroke-opacity="0.18" stroke-width="1"/>`
+      : '';
+    return `${line}<circle cx="${x}" cy="${y}" r="${radius}" fill="${color}" fill-opacity="${opacity}"/>`;
+  }).join('\n    ');
+
+  const title = escapeXml(track.name);
+  const artists = escapeXml(track.artists);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <rect width="${width}" height="${height}" fill="${bg}"/>
+  <rect x="28" y="28" width="${width - 56}" height="${height - 56}" rx="24" fill="none" stroke="#ffffff" stroke-opacity="0.11"/>
+  <g filter="url(#glow)">
+    ${circles}
+  </g>
+  <text x="60" y="${height - 72}" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">${title}</text>
+  <text x="60" y="${height - 38}" fill="#94a3b8" font-family="Inter, Arial, sans-serif" font-size="18">${artists} · 20s / every fifth Spotify track</text>
+  <defs>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+</svg>`;
+}
+
+function writeMidiBuffer(midiData) {
+  const bytes = [];
+  const track = [];
+  const division = midiData.header?.division || 480;
+  const tempo = Math.round(60000000 / (midiData.bpm || 120));
+
+  writeVarLen(track, 0);
+  track.push(0xff, 0x51, 0x03, (tempo >> 16) & 0xff, (tempo >> 8) & 0xff, tempo & 0xff);
+
+  const events = [];
+  for (const note of midiData.notes || []) {
+    const channel = Math.max(0, Math.min(15, note.channel || 0));
+    const pitch = Math.max(0, Math.min(127, note.note || 60));
+    const velocity = Math.max(1, Math.min(127, note.velocity || 64));
+    const startTick = Math.max(0, Math.round(note.startTick || 0));
+    const endTick = Math.max(startTick + 1, Math.round(note.endTick || startTick + note.durationTicks || startTick + division / 4));
+    events.push({ tick: startTick, order: 0, bytes: [0x90 | channel, pitch, velocity] });
+    events.push({ tick: endTick, order: 1, bytes: [0x80 | channel, pitch, 0] });
+  }
+
+  events.sort((a, b) => (a.tick - b.tick) || (a.order - b.order));
+
+  let cursor = 0;
+  for (const event of events) {
+    writeVarLen(track, Math.max(0, event.tick - cursor));
+    track.push(...event.bytes);
+    cursor = event.tick;
+  }
+
+  writeVarLen(track, 0);
+  track.push(0xff, 0x2f, 0x00);
+
+  writeAscii(bytes, 'MThd');
+  writeUInt32(bytes, 6);
+  writeUInt16(bytes, 0);
+  writeUInt16(bytes, 1);
+  writeUInt16(bytes, division);
+  writeAscii(bytes, 'MTrk');
+  writeUInt32(bytes, track.length);
+  bytes.push(...track);
+
+  return Buffer.from(bytes);
+}
+
+function writeAscii(target, text) {
+  for (let i = 0; i < text.length; i++) {
+    target.push(text.charCodeAt(i) & 0xff);
+  }
+}
+
+function writeUInt16(target, value) {
+  target.push((value >> 8) & 0xff, value & 0xff);
+}
+
+function writeUInt32(target, value) {
+  target.push((value >> 24) & 0xff, (value >> 16) & 0xff, (value >> 8) & 0xff, value & 0xff);
+}
+
+function writeVarLen(target, value) {
+  let buffer = value & 0x7f;
+  while ((value >>= 7)) {
+    buffer <<= 8;
+    buffer |= ((value & 0x7f) | 0x80);
+  }
+
+  while (true) {
+    target.push(buffer & 0xff);
+    if (buffer & 0x80) buffer >>= 8;
+    else break;
+  }
+}
+
+function escapeXml(value) {
+  return String(value || '').replace(/[<>&"']/g, char => ({
+    '<': '&lt;',
+    '>': '&gt;',
+    '&': '&amp;',
+    '"': '&quot;',
+    "'": '&apos;',
+  }[char]));
 }
 
 function getRequestAccessToken(req) {
@@ -370,7 +648,9 @@ async function handleSpotifyCallback(req, res) {
     console.log('✅ User:', user.display_name);
 
     // Redirect to cozy player. The browser asks /api/spotify/token after the session cookie is set.
-    const redirectUrl = new URL('/cozy-player', getPublicOrigin(req));
+    const redirectUrl = new URL('/cozy-player',
+      `http://${req.get('host')}`
+    );
 
     res.redirect(redirectUrl.toString());
   } catch (err) {
@@ -787,6 +1067,79 @@ app.post('/api/spotify/logout', (req, res) => {
 });
 
 // ==================== END SPOTIFY ROUTES ====================
+
+app.post('/api/artworks/spotify-capture', (req, res) => {
+  const track = normalizeTrackPayload(req.body?.track || {});
+  const features = req.body?.features || {};
+  const captureSeconds = Math.max(5, Math.min(20, Number(req.body?.captureSeconds) || 20));
+  const triggerEvery = Math.max(1, Number(req.body?.triggerEvery) || 5);
+  const playedCount = Math.max(0, Number(req.body?.playedCount) || 0);
+  const createdAt = new Date().toISOString();
+  const id = `${Date.now()}-${slugify(track.name)}-${crypto.randomBytes(3).toString('hex')}`;
+  const folderName = slugify(`${createdAt.slice(0, 10)}-${track.name}-${track.artists}-${id}`);
+  const folderPath = path.join(ARTWORKS_DIR, folderName);
+  const publicBase = `/generated-artworks/${folderName}`;
+
+  try {
+    fs.mkdirSync(folderPath, { recursive: true });
+
+    const midi = generateMidiCapture(track, features, captureSeconds);
+    const ascii = generateAsciiFromMidi(midi);
+    const svg = generateSvgFromMidi(midi, track, features);
+    const midiFile = writeMidiBuffer(midi);
+    const metadata = {
+      id,
+      folderName,
+      createdAt,
+      triggerEvery,
+      playedCount,
+      captureSeconds,
+      track,
+      features,
+      files: {
+        metadata: `${publicBase}/metadata.json`,
+        midiFile: `${publicBase}/capture.mid`,
+        midi: `${publicBase}/midi.json`,
+        ascii: `${publicBase}/ascii.txt`,
+        svg: `${publicBase}/art.svg`,
+      },
+      noteCount: midi.totalNotes,
+      bpm: midi.bpm,
+      duration: midi.duration,
+      note: 'Automatic Spotify SDK captures are metadata/audio-feature MIDI representations. Use Live Capture with tab/system audio for raw recorded audio.',
+    };
+
+    fs.writeFileSync(path.join(folderPath, 'metadata.json'), JSON.stringify(metadata, null, 2));
+    fs.writeFileSync(path.join(folderPath, 'capture.mid'), midiFile);
+    fs.writeFileSync(path.join(folderPath, 'midi.json'), JSON.stringify(midi, null, 2));
+    fs.writeFileSync(path.join(folderPath, 'ascii.txt'), ascii);
+    fs.writeFileSync(path.join(folderPath, 'art.svg'), svg);
+
+    const artworks = readArtworkIndex().filter(item => item.id !== id);
+    artworks.unshift(metadata);
+    writeArtworkIndex(artworks);
+
+    res.status(201).json({ artwork: metadata });
+  } catch (error) {
+    console.error('❌ Failed to save artwork:', error);
+    res.status(500).json({ error: 'Failed to save artwork' });
+  }
+});
+
+app.get('/api/artworks', (req, res) => {
+  res.json({ artworks: readArtworkIndex() });
+});
+
+app.get('/artworks', (req, res) => {
+  res.sendFile(path.join(__dirname, 'artwork-gallery.html'));
+});
+
+app.get('/artworks/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'artwork-gallery.html'));
+});
+
+app.use('/generated-artworks', express.static(ARTWORKS_DIR));
+
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
