@@ -1,24 +1,32 @@
-# Spotify API Handlers
+# Cozy Studio
 
-Reusable API handlers for Spotify Web API integration.
+Spotify visual player and MIDI artwork studio, prepared for Vercel.
 
-## Files
+## Structure
 
-- `api/login.js` - Authentication and login flow
-- `api/callback.js` - OAuth callback handler
-- `api/me.js` - Get current user profile
-- `api/playlists.js` - Get user playlists
-- `api/recently-played.js` - Get recently played tracks
+- `public/` - static pages and browser assets served by Vercel
+- `public/cozy-player/` - main Spotify visual player
+- `public/midi-to-image/` - MIDI artwork studio
+- `api/` - Vercel serverless entry points
+- `server.js` - Express app used locally and by `api/server.js`
+- `generated-artworks/` - saved artwork output
 
-## Setup
+## Local Run
 
-1. Install dependencies: `npm install`
-2. Set up environment variables (see `.env.example`)
-3. Use these files in your project by importing or copying them
+```sh
+npm install
+npm run dev
+```
 
-## Environment Variables
+Open `http://localhost:8000/cozy-player`.
 
-Required:
+## Vercel
+
+Set these environment variables in Vercel:
+
 - `SPOTIFY_CLIENT_ID`
 - `SPOTIFY_CLIENT_SECRET`
-- `REDIRECT_URI`
+- `SESSION_SECRET`
+- `REDIRECT_URI` as `https://YOUR_DOMAIN/auth/spotify/callback`
+
+Use `chargen` as the Vercel project root if deploying from the parent folder.

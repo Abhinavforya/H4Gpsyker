@@ -1,0 +1,40 @@
+{
+  "id": "1777770993166-iii-gavotte-after-bach-e0cb40",
+  "folderName": "2026-05-03-iii-gavotte-after-bach-sergei-rachmaninoff-vadym-kholodenko-1",
+  "createdAt": "2026-05-03T01:16:33.166Z",
+  "triggerEvery": 5,
+  "playedCount": 10,
+  "captureSeconds": 20,
+  "track": {
+    "id": "64lrZyCUwxeWH592pmloFY",
+    "uri": "spotify:track:64lrZyCUwxeWH592pmloFY",
+    "name": "III. Gavotte (After Bach)",
+    "artists": "Sergei Rachmaninoff, Vadym Kholodenko",
+    "album": "Medtner: Piano Sonata No. 2, Op. 25 - Rachmaninoff: Piano Transcriptions",
+    "duration_ms": 172573,
+    "image": "https://i.scdn.co/image/ab67616d0000b2732d259ce793f7609915d2605b",
+    "popularity": 50
+  },
+  "features": {
+    "tempo": 120,
+    "energy": 0.55,
+    "valence": 0.5,
+    "danceability": 0.52,
+    "acousticness": 0.24,
+    "instrumentalness": 0.08,
+    "liveness": 0.35,
+    "speechiness": 0.08,
+    "loudness": -8
+  },
+  "files": {
+    "metadata": "/generated-artworks/2026-05-03-iii-gavotte-after-bach-sergei-rachmaninoff-vadym-kholodenko-1/metadata.json",
+    "midiFile": "/generated-artworks/2026-05-03-iii-gavotte-after-bach-sergei-rachmaninoff-vadym-kholodenko-1/capture.mid",
+    "midi": "/generated-artworks/2026-05-03-iii-gavotte-after-bach-sergei-rachmaninoff-vadym-kholodenko-1/midi.json",
+    "ascii": "/generated-artworks/2026-05-03-iii-gavotte-after-bach-sergei-rachmaninoff-vadym-kholodenko-1/ascii.txt",
+    "svg": "/generated-artworks/2026-05-03-iii-gavotte-after-bach-sergei-rachmaninoff-vadym-kholodenko-1/art.svg"
+  },
+  "noteCount": 39,
+  "bpm": 120,
+  "duration": 20,
+  "note": "Automatic Spotify SDK captures are metadata/audio-feature MIDI representations. Use Live Capture with tab/system audio for raw recorded audio."
+}

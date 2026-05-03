@@ -31,6 +31,7 @@ const SESSION_MAX_AGE_DAYS = Number(process.env.SESSION_MAX_AGE_DAYS || 7);
 const SESSION_MAX_AGE_MS = SESSION_MAX_AGE_DAYS * 24 * 60 * 60 * 1000;
 const ARTWORKS_DIR = path.join(__dirname, 'generated-artworks');
 const ARTWORK_INDEX_FILE = path.join(ARTWORKS_DIR, 'index.json');
+const PUBLIC_DIR = path.join(__dirname, 'public');
 
 if (!process.env.SESSION_SECRET) {
   console.warn('⚠️ SESSION_SECRET is not set. Using a stable development secret.');
@@ -527,16 +528,15 @@ app.get('/midi-to-image/', (req, res) => {
 
 // Cozy player route
 app.get('/cozy-player', (req, res) => {
-  res.sendFile(path.join(__dirname, 'cozy-player.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'cozy-player', 'index.html'));
 });
 
 app.get('/cozy-player/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'cozy-player.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'cozy-player', 'index.html'));
 });
 
 // Serve static files from the app folder (after routes so they don't intercept)
-app.use('/midi-to-image', express.static(path.join(__dirname, 'midi-to-image')));
-app.use('/cozy-player', express.static(path.join(__dirname, '.')));
+app.use(express.static(PUBLIC_DIR));
 // ==================== SPOTIFY OAUTH ROUTES ====================
 
 // Cozy Player - Get access token for Spotify Web Playback SDK
@@ -1131,11 +1131,11 @@ app.get('/api/artworks', (req, res) => {
 });
 
 app.get('/artworks', (req, res) => {
-  res.sendFile(path.join(__dirname, 'artwork-gallery.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'artwork-gallery.html'));
 });
 
 app.get('/artworks/', (req, res) => {
-  res.sendFile(path.join(__dirname, 'artwork-gallery.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'artwork-gallery.html'));
 });
 
 app.use('/generated-artworks', express.static(ARTWORKS_DIR));
@@ -1146,7 +1146,7 @@ app.get('/health', (req, res) => {
 
 // Catch all - serve index.html for SPA routes
 app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'midi-to-image', 'index.html'));
+  res.sendFile(path.join(PUBLIC_DIR, 'midi-to-image', 'index.html'));
 });
 
 // Error handling
@@ -1157,7 +1157,10 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Server running on http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
