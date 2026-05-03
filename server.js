@@ -21,7 +21,7 @@ const PORT = process.env.PORT || 8000;
 // Spotify OAuth Configuration
 const SPOTIFY_CLIENT_ID = process.env.SPOTIFY_CLIENT_ID;
 const SPOTIFY_CLIENT_SECRET = process.env.SPOTIFY_CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI || 'http://localhost:8000/auth/spotify/callback';
+const FALLBACK_LOCAL_ORIGIN = `http://localhost:${PORT}`;
 
 const SPOTIFY_AUTH_URL = 'https://accounts.spotify.com/authorize';
 const SPOTIFY_TOKEN_URL = 'https://accounts.spotify.com/api/token';
@@ -54,6 +54,31 @@ function createPkcePair() {
   const verifier = base64UrlEncode(crypto.randomBytes(64));
   const challenge = base64UrlEncode(crypto.createHash('sha256').update(verifier).digest());
   return { verifier, challenge };
+}
+
+function getRequestOrigin(req) {
+  if (process.env.SPOTIFY_SITE_URL) {
+    return process.env.SPOTIFY_SITE_URL.replace(/\/$/, '');
+  }
+
+  if (process.env.VERCEL_URL) {
+    return `https://${process.env.VERCEL_URL.replace(/^https?:\/\//, '').replace(/\/$/, '')}`;
+  }
+
+  const forwardedHost = req.get('x-forwarded-host') || req.get('host');
+  const forwardedProto = req.get('x-forwarded-proto') || (process.env.VERCEL ? 'https' : req.protocol);
+
+  if (forwardedHost) {
+    return `${forwardedProto}://${forwardedHost}`;
+  }
+
+  return FALLBACK_LOCAL_ORIGIN;
+}
+
+function getSpotifyRedirectUri(req) {
+  return process.env.SPOTIFY_REDIRECT_URI
+    || process.env.REDIRECT_URI
+    || `${getRequestOrigin(req)}/auth/spotify/callback`;
 }
 
 // Middleware
@@ -583,7 +608,7 @@ app.get('/auth/spotify', (req, res) => {
   authUrl.searchParams.append('response_type', 'code');
   authUrl.searchParams.append('client_id', SPOTIFY_CLIENT_ID);
   authUrl.searchParams.append('scope', scopes);
-  authUrl.searchParams.append('redirect_uri', REDIRECT_URI);
+  authUrl.searchParams.append('redirect_uri', getSpotifyRedirectUri(req));
   authUrl.searchParams.append('state', state);
   authUrl.searchParams.append('code_challenge_method', 'S256');
   authUrl.searchParams.append('code_challenge', pkce.challenge);
@@ -615,7 +640,7 @@ async function handleSpotifyCallback(req, res) {
     const response = await axios.post(SPOTIFY_TOKEN_URL, new URLSearchParams({
       grant_type: 'authorization_code',
       code,
-      redirect_uri: REDIRECT_URI,
+      redirect_uri: getSpotifyRedirectUri(req),
       client_id: SPOTIFY_CLIENT_ID,
       code_verifier: req.session.pkce_verifier,
     }), {
@@ -648,15 +673,13 @@ async function handleSpotifyCallback(req, res) {
     console.log('✅ User:', user.display_name);
 
     // Redirect to cozy player. The browser asks /api/spotify/token after the session cookie is set.
-    const redirectUrl = new URL('/cozy-player',
-      `http://${req.get('host')}`
-    );
+    const redirectUrl = new URL(req.query.next || process.env.SPOTIFY_POST_LOGIN_PATH || '/cozy-player', getRequestOrigin(req));
 
     res.redirect(redirectUrl.toString());
   } catch (err) {
     console.error('❌ Token exchange failed:', err.message);
     console.error('   Full error:', err.response?.data || err);
-    console.error('   REDIRECT_URI:', REDIRECT_URI);
+    console.error('   REDIRECT_URI:', getSpotifyRedirectUri(req));
     console.error('   CLIENT_ID:', SPOTIFY_CLIENT_ID?.substring(0, 8) + '...');
     res.redirect(`/cozy-player?error=token_exchange_failed`);
   }
