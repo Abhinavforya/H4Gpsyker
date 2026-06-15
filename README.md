@@ -185,12 +185,43 @@ VITE_API_URL=/api
 ```
 PORT=5000
 NODE_ENV=development
+AWS_REGION=us-east-1
+S3_UPLOAD_BUCKET=your-upload-bucket
+S3_UPLOAD_PREFIX=ascii-framer/uploads
+# Optional, only if objects are publicly readable or served through CloudFront:
+S3_PUBLIC_BASE_URL=https://your-domain-or-cloudfront-url
 ```
 
 ### AWS Access for S3 Uploads
-- Use an EC2 IAM role with S3 write access
-- Set the bucket, region, and prefix in [backend/awsConfig.js](backend/awsConfig.js)
-- No AWS access keys are required in `.env`
+- Use an EC2 instance profile/IAM role with S3 write access to the upload bucket.
+- Set `AWS_REGION`, `S3_UPLOAD_BUCKET`, and optionally `S3_UPLOAD_PREFIX` in `.env` or the Docker Compose environment.
+- Do not set `AWS_ACCESS_KEY_ID` or `AWS_SECRET_ACCESS_KEY` on the EC2 host. The backend uses the AWS SDK default provider chain, so credentials come from the instance role on Amazon Linux.
+- If the backend runs in Docker on EC2 and S3 calls cannot find credentials, set the instance metadata response hop limit to `2` for the EC2 instance.
+- Profile files are stored under `ascii-framer/uploads/users/<profile-id>/` with `audio/`, `art/`, and `metadata/` folders.
+
+Minimum IAM permissions for profile uploads and gallery loading:
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::your-upload-bucket",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": ["ascii-framer/uploads/users/*"]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": "arn:aws:s3:::your-upload-bucket/ascii-framer/uploads/*"
+    }
+  ]
+}
+```
 
 ## Deployment Steps
 

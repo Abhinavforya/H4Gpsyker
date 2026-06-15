@@ -1,9 +1,13 @@
 import { processFile } from './processor'
 import { saveSnapshot } from './db'
 
-export async function saveAudioUpload(file) {
+export async function saveAudioUpload(file, profile) {
   if (!file) {
     throw new Error('An audio file is required')
+  }
+
+  if (!profile?.id) {
+    throw new Error('Login to a profile before uploading audio')
   }
 
   const generatedArt = await processFile(file)
@@ -11,6 +15,7 @@ export async function saveAudioUpload(file) {
   formData.append('audioFile', file)
   formData.append('generatedArt', generatedArt)
   formData.append('label', file.name)
+  formData.append('userId', profile.id)
 
   const apiBaseUrl = import.meta.env.VITE_BACKEND_API_URL || 'http://localhost:5000'
   const response = await fetch(`${apiBaseUrl}/api/uploads/audio`, {
@@ -28,6 +33,7 @@ export async function saveAudioUpload(file) {
     ...savedRecord,
     kind: 'audio-upload',
     source: 'audio-upload',
+    userId: profile.id,
     input: generatedArt,
     generatedArt,
   }

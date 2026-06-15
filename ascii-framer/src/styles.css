@@ -2,8 +2,17 @@
 html,body,#root{height:100%;}
 body{margin:0;font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace;background:var(--bg);color:var(--fg);-webkit-font-smoothing:antialiased}
 .app-root{display:flex;flex-direction:column;min-height:100vh;padding:24px;gap:18px}
+.header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
 .header h1{margin:0;font-size:20px}
 .header .sub{margin:4px 0 0;color: #9fb6c9}
+.profile-chip{display:flex;align-items:center;gap:8px;background:#041725;border:1px solid rgba(139,233,253,0.16);border-radius:8px;padding:8px 10px}
+.profile-chip span{font-weight:700}
+.profile-chip small{color:#9fb6c9}
+.profile-chip button{padding:6px 8px}
+.profile-login{display:flex;padding:14px;border-radius:8px;background:#041725;border:1px solid rgba(139,233,253,0.16)}
+.profile-login form{display:flex;align-items:end;gap:10px;flex-wrap:wrap}
+.profile-login label{display:block;color:#9fb6c9;font-size:13px;margin-bottom:4px}
+.profile-login input{width:260px;max-width:70vw;background:#02111d;color:var(--fg);border:1px solid #0b2a3a;padding:8px;border-radius:6px}
 .controls{display:flex;gap:12px;align-items:flex-start}
 .controls textarea{width:520px;max-width:60vw;background:#02111d;color:var(--fg);border:1px solid #0b2a3a;padding:8px;border-radius:6px}
 .buttons{display:flex;flex-direction:row;gap:8px;margin-top:6px}

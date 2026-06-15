@@ -43,6 +43,14 @@ cd ~/apps
 git clone <your-repo-url> ascii-framer
 cd ascii-framer
 
+# Configure upload storage. Do not add AWS access keys on EC2.
+cat > .env <<'EOF'
+AWS_REGION=us-east-1
+S3_UPLOAD_BUCKET=your-upload-bucket
+S3_UPLOAD_PREFIX=ascii-framer/uploads
+S3_PUBLIC_BASE_URL=
+EOF
+
 # Start services
 docker-compose up -d
 
@@ -52,6 +60,39 @@ docker-compose ps
 # View logs
 docker-compose logs -f
 ```
+
+## Step 3a: S3 Upload Permissions
+
+Attach an IAM role to the EC2 instance with permission to write uploaded files to the S3 bucket. The backend uses the AWS SDK default credential chain, so Amazon Linux/EC2 should use the instance profile instead of API keys.
+
+Profile files are stored under `ascii-framer/uploads/users/<profile-id>/` with `audio/`, `art/`, and `metadata/` folders.
+
+Minimum policy for profile uploads and gallery loading:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket"],
+      "Resource": "arn:aws:s3:::your-upload-bucket",
+      "Condition": {
+        "StringLike": {
+          "s3:prefix": ["ascii-framer/uploads/users/*"]
+        }
+      }
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:PutObject", "s3:GetObject"],
+      "Resource": "arn:aws:s3:::your-upload-bucket/ascii-framer/uploads/*"
+    }
+  ]
+}
+```
+
+If the backend runs in Docker and logs show missing AWS credentials, update the EC2 instance metadata options so `HttpPutResponseHopLimit` is `2`. This allows containers on the bridge network to reach the instance profile metadata service.
 
 ## Step 4: Configure Security & DNS (Optional)
 

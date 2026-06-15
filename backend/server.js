@@ -3,7 +3,8 @@ const cors = require('cors');
 const path = require('path');
 const multer = require('multer');
 require('dotenv').config();
-const { uploadAudioBundle } = require('./s3Storage');
+const { assertS3Config, listUserArt, sanitizeUserId, uploadAudioBundle, uploadGeneratedArt } = require('./s3Storage');
+const awsConfig = require('./awsConfig');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -21,7 +22,7 @@ app.get('/api/health', (req, res) => {
 
 app.post('/api/uploads/audio', upload.single('audioFile'), async (req, res) => {
   try {
-    const { generatedArt, label } = req.body;
+    const { generatedArt, label, userId } = req.body;
     const file = req.file;
 
     if (!file) {
@@ -36,6 +37,7 @@ app.post('/api/uploads/audio', upload.single('audioFile'), async (req, res) => {
       file,
       generatedArt,
       label: label || file.originalname,
+      userId,
     });
 
     res.json({
@@ -52,6 +54,65 @@ app.post('/api/uploads/audio', upload.single('audioFile'), async (req, res) => {
     console.error('audio upload error', error);
     res.status(500).json({
       error: 'Failed to upload audio bundle to S3',
+      message: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
+
+app.post('/api/uploads/art', async (req, res) => {
+  try {
+    const { generatedArt, input, label, mode, userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+
+    if (!generatedArt && !input) {
+      return res.status(400).json({ error: 'generatedArt or input is required' });
+    }
+
+    const art = generatedArt || input;
+    const storageResult = await uploadGeneratedArt({
+      generatedArt: art,
+      input,
+      label: label || `Manual ${mode || 'text'} snapshot`,
+      mode: mode || 'text',
+      userId,
+    });
+
+    res.json({
+      success: true,
+      source: 'manual',
+      label: label || `Manual ${mode || 'text'} snapshot`,
+      generatedArt: art,
+      input,
+      mode: mode || 'text',
+      ...storageResult,
+    });
+  } catch (error) {
+    console.error('art upload error', error);
+    res.status(500).json({
+      error: 'Failed to upload generated art to S3',
+      message: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
+});
+
+app.get('/api/profiles/:userId/art', async (req, res) => {
+  try {
+    const userId = sanitizeUserId(req.params.userId);
+    const limit = Math.min(Number(req.query.limit) || 50, 100);
+    const items = await listUserArt({ userId, limit });
+
+    res.json({
+      success: true,
+      userId,
+      items,
+    });
+  } catch (error) {
+    console.error('profile art list error', error);
+    res.status(500).json({
+      error: 'Failed to load profile art from S3',
       message: process.env.NODE_ENV === 'development' ? error.message : undefined,
     });
   }
@@ -125,4 +186,11 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`Backend running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  try {
+    assertS3Config();
+    console.log(`S3 uploads enabled: s3://${awsConfig.bucket}/${awsConfig.prefix}`);
+    console.log('AWS credentials: using the default AWS SDK provider chain');
+  } catch (error) {
+    console.warn(`S3 uploads disabled: ${error.message}`);
+  }
 });

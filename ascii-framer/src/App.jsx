@@ -1,7 +1,9 @@
 import React, {useEffect, useState, useRef} from 'react'
 import AsciiArt from './AsciiArt'
-import { getRecentSnapshots, saveSnapshot } from './db'
+import { saveSnapshot } from './db'
 import { saveAudioUpload } from './audioUploadService'
+import { clearStoredProfile, getStoredProfile, saveStoredProfile } from './profileService'
+import { getProfileArt, saveProfileArt } from './profileArtService'
 
 export default function App(){
   const [input, setInput] = useState('H4G')
@@ -12,22 +14,30 @@ export default function App(){
   const [historyStatus, setHistoryStatus] = useState('Loading saved snapshots...')
   const [activeUpload, setActiveUpload] = useState(null)
   const [selectedSnapshot, setSelectedSnapshot] = useState(null)
+  const [profile, setProfile] = useState(() => getStoredProfile())
+  const [profileName, setProfileName] = useState(() => getStoredProfile()?.name || '')
   const fileRef = useRef(null)
 
   useEffect(() => {
     let cancelled = false
 
     async function loadHistory() {
+      if (!profile?.id) {
+        setHistory([])
+        setHistoryStatus('Login to load your saved art.')
+        return
+      }
+
       try {
-        const items = await getRecentSnapshots()
+        const items = await getProfileArt(profile.id)
         if (!cancelled) {
           setHistory(items)
-          setHistoryStatus(items.length ? 'Saved snapshots loaded.' : 'No saved snapshots yet.')
+          setHistoryStatus(items.length ? 'Profile art loaded from S3.' : 'No saved art in this profile yet.')
         }
       } catch (error) {
         if (!cancelled) {
-          console.error('history load error', error)
-          setHistoryStatus('Database unavailable in this browser.')
+          console.error('profile art load error', error)
+          setHistoryStatus('Could not load profile art from S3.')
         }
       }
     }
@@ -37,14 +47,18 @@ export default function App(){
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [profile])
 
   async function handleFiles(files){
     if(!files || files.length === 0) return
+    if(!profile?.id) {
+      alert('Login to a profile before uploading audio.')
+      return
+    }
     const file = files[0]
     setProcessing(true)
     try{
-      const savedUpload = await saveAudioUpload(file)
+      const savedUpload = await saveAudioUpload(file, profile)
       setActiveUpload(savedUpload)
       setSelectedSnapshot(savedUpload)
       setInput(savedUpload.input)
@@ -72,22 +86,43 @@ export default function App(){
   }
 
   async function persistSnapshot(snapshot) {
+    if (!profile?.id) {
+      alert('Login to a profile before saving art.')
+      return
+    }
+
     try {
-      await saveSnapshot(snapshot)
-      await refreshHistory('Snapshot saved.')
+      const savedArt = await saveProfileArt({
+        ...snapshot,
+        userId: profile.id,
+        generatedArt: artOutput || snapshot.input,
+      })
+      await saveSnapshot({
+        ...snapshot,
+        ...savedArt,
+        userId: profile.id,
+      })
+      setSelectedSnapshot(savedArt)
+      await refreshHistory('Art saved to your S3 profile.')
     } catch (error) {
       console.error('snapshot save error', error)
-      setHistoryStatus('Could not save to database.')
+      setHistoryStatus('Could not save art to S3.')
     }
   }
 
   async function refreshHistory(statusMessage) {
-    const items = await getRecentSnapshots()
+    if (!profile?.id) {
+      setHistory([])
+      setHistoryStatus('Login to load your saved art.')
+      return
+    }
+
+    const items = await getProfileArt(profile.id)
     setHistory(items)
     if (statusMessage) {
       setHistoryStatus(statusMessage)
     } else {
-      setHistoryStatus(items.length ? 'Saved snapshots loaded.' : 'No saved snapshots yet.')
+      setHistoryStatus(items.length ? 'Profile art loaded from S3.' : 'No saved art in this profile yet.')
     }
   }
 
@@ -111,6 +146,24 @@ export default function App(){
 
   function viewSnapshot(snapshot) {
     restoreSnapshot(snapshot)
+  }
+
+  function handleLogin(event) {
+    event.preventDefault()
+    const nextProfile = saveStoredProfile(profileName)
+    setProfile(nextProfile)
+    setProfileName(nextProfile.name)
+    setSelectedSnapshot(null)
+    setActiveUpload(null)
+  }
+
+  function handleLogout() {
+    clearStoredProfile()
+    setProfile(null)
+    setHistory([])
+    setSelectedSnapshot(null)
+    setActiveUpload(null)
+    setHistoryStatus('Login to load your saved art.')
   }
 
   function downloadSnapshotAudio(snapshot) {
@@ -138,9 +191,33 @@ export default function App(){
   return (
     <div className="app-root">
       <header className="header">
-        <h1>ASCII Framer — live ASCII animations</h1>
-        <p className="sub">Paste text or upload audio/MIDI to generate animated ASCII</p>
+        <div>
+          <h1>ASCII Framer — live ASCII animations</h1>
+          <p className="sub">Paste text or upload audio/MIDI to generate animated ASCII</p>
+        </div>
+        {profile ? (
+          <div className="profile-chip">
+            <span>{profile.name}</span>
+            <small>{profile.id}</small>
+            <button type="button" onClick={handleLogout}>Logout</button>
+          </div>
+        ) : null}
       </header>
+
+      {!profile && (
+        <section className="profile-login">
+          <form onSubmit={handleLogin}>
+            <label htmlFor="profile-name">Profile</label>
+            <input
+              id="profile-name"
+              value={profileName}
+              onChange={event => setProfileName(event.target.value)}
+              placeholder="Enter your name or email"
+            />
+            <button type="submit">Login</button>
+          </form>
+        </section>
+      )}
 
       <section className="controls">
         <div className="left-controls">
@@ -167,7 +244,7 @@ export default function App(){
           <div className="status">{processing ? 'Processing...' : 'Ready'}</div>
           {activeUpload && (
             <div className="status">
-              Saved to S3: {activeUpload.fileName} · audio, art, and metadata stored
+              Saved to S3 profile: {activeUpload.fileName} · audio, art, and metadata stored
             </div>
           )}
         </div>
@@ -175,21 +252,21 @@ export default function App(){
 
       <section className="database-panel">
         <div className="database-header">
-          <h2>Local DB</h2>
+          <h2>{profile ? `${profile.name}'s profile art` : 'Profile art'}</h2>
           <p>{historyStatus}</p>
         </div>
         <div className="history-list">
           {history.length === 0 ? (
-            <div className="history-empty">Saved snapshots will appear here after you click Save Snapshot or upload a file.</div>
+            <div className="history-empty">Saved art will appear here after you login and save or upload a file.</div>
           ) : history.map(item => (
             <div
-              key={item.id}
+              key={item.id || item.metadataKey || item.artKey}
               className="history-item"
             >
               <div className="history-item-main" onClick={() => viewSnapshot(item)}>
                 <strong>{item.label || 'Untitled snapshot'}</strong>
                 <span>{new Date(item.createdAt).toLocaleString()}</span>
-                <small>{item.source === 'audio-upload' ? 'Audio upload stored in AWS S3' : 'Saved manually'}</small>
+                <small>{item.source === 'audio-upload' ? 'Audio upload stored in your S3 profile' : 'Generated art stored in your S3 profile'}</small>
               </div>
               <div className="history-item-actions">
                 <button type="button" onClick={() => viewSnapshot(item)}>View</button>
@@ -206,13 +283,13 @@ export default function App(){
             <p>{selectedSnapshot.label || selectedSnapshot.fileName || 'Selected snapshot'}</p>
             {selectedSnapshot.source === 'audio-upload' ? (
               <>
-                <p>Audio file, generated ASCII, and metadata are saved in AWS S3.</p>
+                <p>Audio file, generated ASCII, and metadata are saved in this profile's S3 folder.</p>
                 <button type="button" onClick={() => downloadSnapshotAudio(selectedSnapshot)}>
                   Download saved audio
                 </button>
               </>
             ) : (
-              <p>Manual snapshot loaded.</p>
+              <p>Generated art loaded from this profile's S3 folder.</p>
             )}
           </div>
         )}
