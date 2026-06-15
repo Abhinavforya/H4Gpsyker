@@ -187,6 +187,11 @@ PORT=5000
 NODE_ENV=development
 ```
 
+### AWS Access for S3 Uploads
+- Use an EC2 IAM role with S3 write access
+- Set the bucket, region, and prefix in [backend/awsConfig.js](backend/awsConfig.js)
+- No AWS access keys are required in `.env`
+
 ## Deployment Steps
 
 ### 1. Prepare EC2 Instance

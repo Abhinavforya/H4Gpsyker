@@ -1,17 +1,10 @@
 const path = require('path')
 const { randomUUID } = require('crypto')
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3')
-
-function requireEnv(name) {
-  const value = process.env[name]
-  if (!value) {
-    throw new Error(`Missing required AWS environment variable: ${name}`)
-  }
-  return value
-}
+const awsConfig = require('./awsConfig')
 
 const s3Client = new S3Client({
-  region: requireEnv('AWS_REGION'),
+  region: awsConfig.region,
 })
 
 function sanitizeFilename(filename) {
@@ -27,9 +20,13 @@ function buildKey(prefix, filename) {
 }
 
 async function uploadAudioBundle({ file, generatedArt, label }) {
-  const bucket = requireEnv('AWS_S3_BUCKET')
-  const uploadPrefix = process.env.AWS_S3_PREFIX || 'ascii-framer/uploads'
-  const publicBaseUrl = process.env.AWS_S3_PUBLIC_BASE_URL || ''
+  const bucket = awsConfig.bucket
+  const uploadPrefix = awsConfig.prefix
+  const publicBaseUrl = awsConfig.publicBaseUrl
+
+  if (!bucket) {
+    throw new Error('Missing S3 bucket configuration')
+  }
 
   const audioKey = buildKey(path.posix.join(uploadPrefix, 'audio'), file.originalname)
   const artKey = buildKey(path.posix.join(uploadPrefix, 'art'), `${label || file.originalname}.txt`)
