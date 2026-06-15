@@ -27,8 +27,14 @@ const charV = {
   visible: { opacity: 1, y: 0, scale:1 }
 }
 
-export default function AsciiArt({text='H4G', mode='text'}){
-  const lines = useMemo(()=>textToAsciiLines(text, 48), [text, mode])
+export default function AsciiArt({text='H4G', mode='text', art=''}){
+  const lines = useMemo(() => {
+    if (art) {
+      return art.split('\n')
+    }
+
+    return textToAsciiLines(text, 48)
+  }, [text, mode, art])
 
   return (
     <div className="ascii-wrap">

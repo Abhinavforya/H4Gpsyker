@@ -1,14 +1,17 @@
 import React, {useEffect, useState, useRef} from 'react'
 import AsciiArt from './AsciiArt'
-import { processFile } from './processor'
 import { getRecentSnapshots, saveSnapshot } from './db'
+import { saveAudioUpload } from './audioUploadService'
 
 export default function App(){
   const [input, setInput] = useState('H4G')
   const [mode, setMode] = useState('text')
+  const [artOutput, setArtOutput] = useState('')
   const [processing, setProcessing] = useState(false)
   const [history, setHistory] = useState([])
   const [historyStatus, setHistoryStatus] = useState('Loading saved snapshots...')
+  const [activeUpload, setActiveUpload] = useState(null)
+  const [selectedSnapshot, setSelectedSnapshot] = useState(null)
   const fileRef = useRef(null)
 
   useEffect(() => {
@@ -38,18 +41,16 @@ export default function App(){
 
   async function handleFiles(files){
     if(!files || files.length === 0) return
-    const f = files[0]
+    const file = files[0]
     setProcessing(true)
     try{
-      const ascii = await processFile(f)
-      setInput(ascii)
+      const savedUpload = await saveAudioUpload(file)
+      setActiveUpload(savedUpload)
+      setSelectedSnapshot(savedUpload)
+      setInput(savedUpload.input)
+      setArtOutput(savedUpload.generatedArt)
       setMode('text')
-      await persistSnapshot({
-        input: ascii,
-        mode: 'text',
-        label: f.name,
-        source: 'file',
-      })
+      await refreshHistory('Audio upload saved with generated art.')
     }catch(err){
       console.error('processing error', err)
       alert('File processing failed: '+ (err && err.message ? err.message : String(err)))
@@ -73,12 +74,20 @@ export default function App(){
   async function persistSnapshot(snapshot) {
     try {
       await saveSnapshot(snapshot)
-      const items = await getRecentSnapshots()
-      setHistory(items)
-      setHistoryStatus('Snapshot saved.')
+      await refreshHistory('Snapshot saved.')
     } catch (error) {
       console.error('snapshot save error', error)
       setHistoryStatus('Could not save to database.')
+    }
+  }
+
+  async function refreshHistory(statusMessage) {
+    const items = await getRecentSnapshots()
+    setHistory(items)
+    if (statusMessage) {
+      setHistoryStatus(statusMessage)
+    } else {
+      setHistoryStatus(items.length ? 'Saved snapshots loaded.' : 'No saved snapshots yet.')
     }
   }
 
@@ -93,8 +102,37 @@ export default function App(){
 
   function restoreSnapshot(snapshot) {
     if (!snapshot) return
+    setSelectedSnapshot(snapshot)
     setInput(snapshot.input || '')
     setMode(snapshot.mode || 'text')
+    setArtOutput(snapshot.generatedArt || '')
+    setActiveUpload(snapshot.source === 'audio-upload' ? snapshot : null)
+  }
+
+  function viewSnapshot(snapshot) {
+    restoreSnapshot(snapshot)
+  }
+
+  function downloadSnapshotAudio(snapshot) {
+    const downloadUrl = snapshot?.audioUrl
+    const sourceFile = snapshot?.audioFile
+    if (!downloadUrl && !sourceFile) {
+      alert('No saved audio file is available for this entry.')
+      return
+    }
+
+    const link = document.createElement('a')
+    if (downloadUrl) {
+      link.href = downloadUrl
+    } else {
+      const objectUrl = URL.createObjectURL(sourceFile)
+      link.href = objectUrl
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 1000)
+    }
+    link.download = snapshot.fileName || 'audio-upload'
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
   }
 
   return (
@@ -121,12 +159,17 @@ export default function App(){
         <div className="upload-panel">
           <div className="dropzone" onDrop={handleDrop} onDragOver={handleDragOver}>
             <div className="drop-content">
-              <strong>Drop audio (.mp3, .wav) or MIDI (.mid) here</strong>
+              <strong>Drop an audio file here (.mp3, .wav, .ogg, .m4a)</strong>
               <div className="muted">or <button onClick={()=>fileRef.current.click()}>choose a file</button></div>
-              <input ref={fileRef} type="file" style={{display:'none'}} onChange={e=>handleFiles(e.target.files)} />
+              <input ref={fileRef} type="file" accept="audio/*,.mid,.midi" style={{display:'none'}} onChange={e=>handleFiles(e.target.files)} />
             </div>
           </div>
           <div className="status">{processing ? 'Processing...' : 'Ready'}</div>
+          {activeUpload && (
+            <div className="status">
+              Saved to S3: {activeUpload.fileName} · audio, art, and metadata stored
+            </div>
+          )}
         </div>
       </section>
 
@@ -139,21 +182,44 @@ export default function App(){
           {history.length === 0 ? (
             <div className="history-empty">Saved snapshots will appear here after you click Save Snapshot or upload a file.</div>
           ) : history.map(item => (
-            <button
+            <div
               key={item.id}
               className="history-item"
-              onClick={() => restoreSnapshot(item)}
             >
-              <strong>{item.label || 'Untitled snapshot'}</strong>
-              <span>{new Date(item.createdAt).toLocaleString()}</span>
-              <small>{item.source === 'file' ? 'Imported from file' : 'Saved manually'}</small>
-            </button>
+              <div className="history-item-main" onClick={() => viewSnapshot(item)}>
+                <strong>{item.label || 'Untitled snapshot'}</strong>
+                <span>{new Date(item.createdAt).toLocaleString()}</span>
+                <small>{item.source === 'audio-upload' ? 'Audio upload stored in AWS S3' : 'Saved manually'}</small>
+              </div>
+              <div className="history-item-actions">
+                <button type="button" onClick={() => viewSnapshot(item)}>View</button>
+                {item.source === 'audio-upload' && (
+                  <button type="button" onClick={() => downloadSnapshotAudio(item)}>Download audio</button>
+                )}
+              </div>
+            </div>
           ))}
         </div>
+        {selectedSnapshot && (
+          <div className="selected-snapshot">
+            <h3>Saved preview</h3>
+            <p>{selectedSnapshot.label || selectedSnapshot.fileName || 'Selected snapshot'}</p>
+            {selectedSnapshot.source === 'audio-upload' ? (
+              <>
+                <p>Audio file, generated ASCII, and metadata are saved in AWS S3.</p>
+                <button type="button" onClick={() => downloadSnapshotAudio(selectedSnapshot)}>
+                  Download saved audio
+                </button>
+              </>
+            ) : (
+              <p>Manual snapshot loaded.</p>
+            )}
+          </div>
+        )}
       </section>
 
       <main className="canvas">
-        <AsciiArt text={input} mode={mode} />
+        <AsciiArt text={input} mode={mode} art={artOutput} />
       </main>
 
       <footer className="footer">Framer Motion used for staggered line & char animation</footer>

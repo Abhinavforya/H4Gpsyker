@@ -1,10 +1,13 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const multer = require('multer');
 require('dotenv').config();
+const { uploadAudioBundle } = require('./s3Storage');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Middleware
 app.use(cors());
@@ -14,6 +17,44 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 // Routes
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Backend is running', timestamp: new Date().toISOString() });
+});
+
+app.post('/api/uploads/audio', upload.single('audioFile'), async (req, res) => {
+  try {
+    const { generatedArt, label } = req.body;
+    const file = req.file;
+
+    if (!file) {
+      return res.status(400).json({ error: 'audioFile is required' });
+    }
+
+    if (!generatedArt) {
+      return res.status(400).json({ error: 'generatedArt is required' });
+    }
+
+    const storageResult = await uploadAudioBundle({
+      file,
+      generatedArt,
+      label: label || file.originalname,
+    });
+
+    res.json({
+      success: true,
+      source: 'aws-s3',
+      label: label || file.originalname,
+      fileName: file.originalname,
+      fileType: file.mimetype,
+      fileSize: file.size,
+      generatedArt,
+      ...storageResult,
+    });
+  } catch (error) {
+    console.error('audio upload error', error);
+    res.status(500).json({
+      error: 'Failed to upload audio bundle to S3',
+      message: process.env.NODE_ENV === 'development' ? error.message : undefined,
+    });
+  }
 });
 
 app.post('/api/process', (req, res) => {
