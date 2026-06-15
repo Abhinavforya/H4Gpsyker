@@ -186,7 +186,7 @@ VITE_API_URL=/api
 PORT=5000
 NODE_ENV=development
 AWS_REGION=us-east-1
-S3_UPLOAD_BUCKET=your-upload-bucket
+S3_UPLOAD_BUCKET=nino87
 S3_UPLOAD_PREFIX=ascii-framer/uploads
 # Optional, only if objects are publicly readable or served through CloudFront:
 S3_PUBLIC_BASE_URL=https://your-domain-or-cloudfront-url
@@ -207,7 +207,7 @@ Minimum IAM permissions for profile uploads and gallery loading:
     {
       "Effect": "Allow",
       "Action": ["s3:ListBucket"],
-      "Resource": "arn:aws:s3:::your-upload-bucket",
+      "Resource": "arn:aws:s3:::nino87",
       "Condition": {
         "StringLike": {
           "s3:prefix": ["ascii-framer/uploads/users/*"]
@@ -217,7 +217,7 @@ Minimum IAM permissions for profile uploads and gallery loading:
     {
       "Effect": "Allow",
       "Action": ["s3:PutObject", "s3:GetObject"],
-      "Resource": "arn:aws:s3:::your-upload-bucket/ascii-framer/uploads/*"
+      "Resource": "arn:aws:s3:::nino87/ascii-framer/uploads/*"
     }
   ]
 }

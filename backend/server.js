@@ -17,7 +17,17 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Routes
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'Backend is running', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'Backend is running',
+    timestamp: new Date().toISOString(),
+    storage: {
+      provider: 'aws-s3',
+      bucket: awsConfig.bucket,
+      prefix: awsConfig.prefix,
+      region: awsConfig.region,
+      uploadsEnabled: Boolean(awsConfig.bucket),
+    },
+  });
 });
 
 app.post('/api/uploads/audio', upload.single('audioFile'), async (req, res) => {

@@ -62,7 +62,7 @@ Create the production environment file:
 # Configure upload storage. Do not add AWS access keys on EC2.
 cat > .env <<'EOF'
 AWS_REGION=ap-southeast-2
-S3_UPLOAD_BUCKET=new.nv
+S3_UPLOAD_BUCKET=nino87
 S3_UPLOAD_PREFIX=ascii-framer/uploads
 S3_PUBLIC_BASE_URL=
 EOF
@@ -103,7 +103,7 @@ Minimum policy for profile uploads and gallery loading:
     {
       "Effect": "Allow",
       "Action": ["s3:ListBucket"],
-      "Resource": "arn:aws:s3:::new.nv",
+      "Resource": "arn:aws:s3:::nino87",
       "Condition": {
         "StringLike": {
           "s3:prefix": ["ascii-framer/uploads/users/*"]
@@ -113,7 +113,7 @@ Minimum policy for profile uploads and gallery loading:
     {
       "Effect": "Allow",
       "Action": ["s3:PutObject", "s3:GetObject"],
-      "Resource": "arn:aws:s3:::new.nv/ascii-framer/uploads/*"
+      "Resource": "arn:aws:s3:::nino87/ascii-framer/uploads/*"
     }
   ]
 }
@@ -128,19 +128,19 @@ docker logs -f ascii-framer-backend
 Expected message:
 
 ```text
-S3 uploads enabled: s3://new.nv/ascii-framer/uploads
+S3 uploads enabled: s3://nino87/ascii-framer/uploads
 AWS credentials: using the default AWS SDK provider chain
 ```
 
 Upload a file in the app, then check this S3 location:
 
 ```text
-s3://new.nv/ascii-framer/uploads/users/
+s3://nino87/ascii-framer/uploads/users/
 ```
 
 Common issues:
 
-- `Missing S3_UPLOAD_BUCKET environment variable`: the `.env` file is missing `S3_UPLOAD_BUCKET=new.nv`.
+- `Missing S3_UPLOAD_BUCKET environment variable`: the `.env` file is missing `S3_UPLOAD_BUCKET=nino87`.
 - `AccessDenied`: the EC2 IAM role is missing the S3 policy or is not attached to the instance.
 - `NoSuchBucket`: the bucket name is wrong.
 - Region errors: keep `AWS_REGION=ap-southeast-2` for the Sydney bucket.
@@ -151,7 +151,7 @@ If the backend runs in Docker and logs show missing AWS credentials, update the 
 
 ### Set up Nginx Reverse Proxy
 
-Create `/home/ubuntu/apps/nginx/nginx.conf`:
+The production Compose file mounts the checked-in `nginx.conf` from the project root. If you want a custom reverse proxy, edit `/home/ubuntu/apps/ascii-framer/nginx.conf`:
 
 ```nginx
 upstream frontend {
