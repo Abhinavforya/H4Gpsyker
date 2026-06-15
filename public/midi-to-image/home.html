@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>H4G - Harmony for Generative Art</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #00ff41;
+            --primary-dark: #00cc34;
+            --secondary: #ff006e;
+            --bg: #0a0e27;
+            --bg-light: #1a1f3a;
+            --text: #e0e0e0;
+            --text-muted: #8a8a9e;
+            --accent: #00d9ff;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: linear-gradient(135deg, var(--bg) 0%, #1a0033 100%);
+            color: var(--text);
+            line-height: 1.6;
+            overflow-x: hidden;
+            min-height: 100vh;
+        }
+
+        /* Animated background grid */
+        .bg-grid {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                linear-gradient(0deg, transparent 24%, rgba(0, 255, 65, 0.05) 25%, rgba(0, 255, 65, 0.05) 26%, transparent 27%, transparent 74%, rgba(0, 255, 65, 0.05) 75%, rgba(0, 255, 65, 0.05) 76%, transparent 77%, transparent),
+                linear-gradient(90deg, transparent 24%, rgba(0, 255, 65, 0.05) 25%, rgba(0, 255, 65, 0.05) 26%, transparent 27%, transparent 74%, rgba(0, 255, 65, 0.05) 75%, rgba(0, 255, 65, 0.05) 76%, transparent 77%, transparent);
+            background-size: 50px 50px;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* Navbar */
+        nav {
+            position: relative;
+            z-index: 100;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 40px;
+            border-bottom: 2px solid var(--primary);
+            background: rgba(10, 14, 39, 0.95);
+            backdrop-filter: blur(10px);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 3px;
+            color: var(--primary);
+            text-shadow: 0 0 10px var(--primary);
+            animation: glow 2s ease-in-out infinite;
+        }
+
+        @keyframes glow {
+            0%, 100% { text-shadow: 0 0 10px var(--primary); }
+            50% { text-shadow: 0 0 20px var(--primary), 0 0 30px var(--accent); }
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 30px;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text);
+            text-decoration: none;
+            transition: all 0.3s;
+            position: relative;
+        }
+
+        .nav-links a:hover {
+            color: var(--primary);
+            text-shadow: 0 0 10px var(--primary);
+        }
+
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: var(--primary);
+            transition: width 0.3s;
+        }
+
+        .nav-links a:hover::after {
+            width: 100%;
+        }
+
+        .cta-button {
+            padding: 10px 20px;
+            background: var(--primary);
+            color: var(--bg);
+            border: none;
+            border-radius: 0;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+            letter-spacing: 2px;
+            transition: all 0.3s;
+            box-shadow: 0 0 20px var(--primary);
+        }
+
+        .cta-button:hover {
+            background: var(--accent);
+            box-shadow: 0 0 30px var(--accent);
+            transform: translateY(-2px);
+        }
+
+        /* Main content */
+        .container {
+            position: relative;
+            z-index: 10;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 40px;
+        }
+
+        /* Hero section */
+        .hero {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+            min-height: calc(100vh - 80px);
+            padding: 60px 0;
+        }
+
+        .hero-content h1 {
+            font-size: 64px;
+            font-weight: bold;
+            line-height: 1.2;
+            margin-bottom: 20px;
+            color: var(--primary);
+            text-shadow: 0 0 20px var(--primary);
+            letter-spacing: 2px;
+        }
+
+        .hero-content h1 .accent {
+            color: var(--accent);
+            text-shadow: 0 0 20px var(--accent);
+        }
+
+        .hero-content p {
+            font-size: 18px;
+            color: var(--text-muted);
+            margin-bottom: 30px;
+            line-height: 1.8;
+        }
+
+        .ascii-section {
+            display: flex;
+            gap: 20px;
+            margin-top: 40px;
+        }
+
+        .ascii-box {
+            flex: 1;
+            background: rgba(0, 255, 65, 0.05);
+            border: 2px solid var(--primary);
+            padding: 20px;
+            font-size: 12px;
+            color: var(--primary);
+            overflow: auto;
+            max-height: 200px;
+            line-height: 1.2;
+        }
+
+        .hero-ascii {
+            font-size: 11px;
+            line-height: 1.1;
+            color: var(--accent);
+            overflow: hidden;
+            font-weight: bold;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 20px;
+            margin-top: 40px;
+        }
+
+        .btn {
+            padding: 15px 35px;
+            border: 2px solid var(--primary);
+            background: transparent;
+            color: var(--primary);
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn:hover {
+            background: var(--primary);
+            color: var(--bg);
+            box-shadow: 0 0 20px var(--primary);
+            transform: translateY(-2px);
+        }
+
+        .btn-secondary {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .btn-secondary:hover {
+            background: var(--accent);
+            color: var(--bg);
+            box-shadow: 0 0 20px var(--accent);
+        }
+
+        /* Features section */
+        .features {
+            padding: 100px 0;
+            border-top: 2px solid var(--primary);
+            border-bottom: 2px solid var(--primary);
+            margin-top: 100px;
+            background: linear-gradient(180deg, transparent, rgba(0, 255, 65, 0.02));
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 48px;
+            margin-bottom: 60px;
+            color: var(--primary);
+            letter-spacing: 2px;
+            text-shadow: 0 0 20px var(--primary);
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 30px;
+        }
+
+        .feature-card {
+            background: rgba(26, 31, 58, 0.6);
+            border: 2px solid var(--primary);
+            padding: 30px;
+            position: relative;
+            transition: all 0.3s;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(0, 255, 65, 0.1), transparent);
+            transition: left 0.3s;
+        }
+
+        .feature-card:hover {
+            box-shadow: 0 0 30px var(--primary);
+            transform: translateY(-5px);
+        }
+
+        .feature-card:hover::before {
+            left: 100%;
+        }
+
+        .feature-icon {
+            font-size: 36px;
+            margin-bottom: 15px;
+            color: var(--accent);
+        }
+
+        .feature-card h3 {
+            color: var(--primary);
+            font-size: 20px;
+            margin-bottom: 10px;
+            letter-spacing: 1px;
+        }
+
+        .feature-card p {
+            color: var(--text-muted);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* Formats section */
+        .formats {
+            padding: 100px 0;
+        }
+
+        .formats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+
+        .format-tag {
+            background: rgba(0, 255, 65, 0.1);
+            border: 1px solid var(--primary);
+            padding: 15px;
+            text-align: center;
+            color: var(--primary);
+            font-size: 14px;
+            font-weight: bold;
+            letter-spacing: 1px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .format-tag:hover {
+            background: var(--primary);
+            color: var(--bg);
+            box-shadow: 0 0 15px var(--primary);
+            transform: scale(1.05);
+        }
+
+        /* Stats section */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            padding: 100px 0;
+            border-top: 2px solid var(--primary);
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 20px;
+            border: 2px solid var(--accent);
+            background: rgba(0, 217, 255, 0.02);
+        }
+
+        .stat-number {
+            font-size: 48px;
+            color: var(--accent);
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-shadow: 0 0 20px var(--accent);
+        }
+
+        .stat-label {
+            color: var(--text-muted);
+            font-size: 14px;
+            letter-spacing: 2px;
+        }
+
+        /* Footer */
+        footer {
+            border-top: 2px solid var(--primary);
+            padding: 50px 0;
+            text-align: center;
+            background: rgba(10, 14, 39, 0.95);
+            position: relative;
+            z-index: 10;
+        }
+
+        .footer-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 40px;
+        }
+
+        .footer-ascii {
+            font-size: 12px;
+            color: var(--primary);
+            margin-bottom: 30px;
+            line-height: 1.2;
+        }
+
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 40px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .footer-links a {
+            color: var(--text);
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+
+        .footer-links a:hover {
+            color: var(--primary);
+            text-shadow: 0 0 10px var(--primary);
+        }
+
+        .footer-credit {
+            color: var(--text-muted);
+            font-size: 12px;
+            padding-top: 20px;
+            border-top: 1px solid var(--primary);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .hero {
+                grid-template-columns: 1fr;
+                gap: 40px;
+            }
+
+            .nav-links {
+                gap: 15px;
+                font-size: 14px;
+            }
+
+            .hero-content h1 {
+                font-size: 48px;
+            }
+
+            nav {
+                padding: 15px 20px;
+            }
+
+            .container {
+                padding: 0 20px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .nav-links {
+                display: none;
+            }
+
+            .hero-content h1 {
+                font-size: 36px;
+            }
+
+            .section-title {
+                font-size: 32px;
+            }
+
+            .ascii-section {
+                flex-direction: column;
+            }
+
+            .button-group {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+        }
+
+        /* Loading animation */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        /* Scroll reveal */
+        .reveal {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: all 0.6s ease-out;
+        }
+
+        .reveal.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    </style>
+</head>
+<body>
+    <div class="bg-grid"></div>
+
+    <!-- Navigation -->
+    <nav>
+        <div class="logo">H4G</div>
+        <ul class="nav-links">
+            <li><a href="#features">FEATURES</a></li>
+            <li><a href="#formats">FORMATS</a></li>
+            <li><a href="#about">ABOUT</a></li>
+            <li><a href="#contact">CONTACT</a></li>
+        </ul>
+        <button class="cta-button" onclick="goToApp()">LAUNCH APP</button>
+    </nav>
+
+    <!-- Main content -->
+    <div class="container">
+        <!-- Hero section -->
+        <section class="hero">
+            <div class="hero-content">
+                <h1>
+                    <span>HARMONY</span><br>
+                    FOR <span class="accent">GENERATIVE</span><br>
+                    <span class="accent">ART</span>
+                </h1>
+                <p>Transform your music into stunning ASCII art and visual masterpieces. Upload MIDI, MP3, or stream from Spotify and watch magic happen.</p>
+
+                <div class="ascii-section">
+                    <div class="ascii-box hero-ascii">
+                        ▪ ╔═════════════╗
+                        ▪ ║  MUSIC ART  ║
+                        ▪ ║  IN MOTION  ║
+                        ▪ ╚═════════════╝
+                        ▪ » ASCII RENDER
+                        ▪ » 60 FPS CANVAS
+                        ▪ » REAL-TIME
+                    </div>
+                </div>
+
+                <div class="button-group">
+                    <button class="btn" onclick="goToApp()">[ START CREATING ]</button>
+                    <button class="btn btn-secondary" onclick="scrollToSection('features')">[ LEARN MORE ]</button>
+                </div>
+            </div>
+
+            <div class="hero-ascii" style="font-size: 10px; color: var(--primary);">
+                <pre>
+    ╔════════════════╗
+    ║               ║
+    ║  🎵 H4G 🎵  ║
+    ║               ║
+    ║ MUSIC→VISUAL  ║
+    ║               ║
+    ║ ASCII • P5JS  ║
+    ║ SPOTIFY • FFT ║
+    ║               ║
+    ╚════════════════╝
+
+    [ ▶ PLAY ]
+    [ ◼ RENDER ]
+    [ ◉ EXPORT ]
+                </pre>
+            </div>
+        </section>
+
+        <!-- Features section -->
+        <section class="features" id="features">
+            <h2 class="section-title">[ FEATURES ]</h2>
+            <div class="features-grid">
+                <div class="feature-card reveal">
+                    <div class="feature-icon">🎵</div>
+                    <h3>MULTI-FORMAT</h3>
+                    <p>Support for MIDI, MP3, WAV, OGG, FLAC, AAC, and WebM. Convert any audio to visual art instantly.</p>
+                </div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon">🎨</div>
+                    <h3>ASCII GENERATOR</h3>
+                    <p>10 character sets and 12 color themes. Create stunning ASCII art from your music in real-time.</p>
+                </div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon">🖼️</div>
+                    <h3>P5.JS CANVAS</h3>
+                    <p>8 visualization modes including particles, waves, mandala, and constellation patterns at 60 FPS.</p>
+                </div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon">📻</div>
+                    <h3>SPOTIFY INTEGRATION</h3>
+                    <p>Connect your Spotify account and convert your playlists and favorite tracks instantly.</p>
+                </div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon">⚡</div>
+                    <h3>REAL-TIME ANALYSIS</h3>
+                    <p>BPM detection, beat analysis, spectral features, and advanced pitch detection with autocorrelation.</p>
+                </div>
+                <div class="feature-card reveal">
+                    <div class="feature-icon">💾</div>
+                    <h3>EXPORT OPTIONS</h3>
+                    <p>Save ASCII art as text, export visualizations as PNG, or copy to clipboard with one click.</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Formats section -->
+        <section class="formats" id="formats">
+            <h2 class="section-title">[ SUPPORTED FORMATS ]</h2>
+            <div class="formats-grid">
+                <div class="format-tag">MIDI</div>
+                <div class="format-tag">MP3</div>
+                <div class="format-tag">WAV</div>
+                <div class="format-tag">OGG</div>
+                <div class="format-tag">FLAC</div>
+                <div class="format-tag">AAC</div>
+                <div class="format-tag">WEBM</div>
+                <div class="format-tag">SPOTIFY</div>
+            </div>
+        </section>
+
+        <!-- Stats section -->
+        <section class="stats">
+            <div class="stat-item reveal">
+                <div class="stat-number">40+</div>
+                <div class="stat-label">FEATURES</div>
+            </div>
+            <div class="stat-item reveal">
+                <div class="stat-number">8</div>
+                <div class="stat-label">RENDER MODES</div>
+            </div>
+            <div class="stat-item reveal">
+                <div class="stat-number">22</div>
+                <div class="stat-label">CUSTOMIZATIONS</div>
+            </div>
+            <div class="stat-item reveal">
+                <div class="stat-number">7</div>
+                <div class="stat-label">INPUT FORMATS</div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-content">
+            <div class="footer-ascii">
+                ╔════════════════════╗<br>
+                ║  MUSIC INTO ART    ║<br>
+                ║  CREATIVITY ONLINE ║<br>
+                ╚════════════════════╝
+            </div>
+            <div class="footer-links">
+                <a href="https://github.com" target="_blank">GITHUB</a>
+                <a href="https://twitter.com" target="_blank">TWITTER</a>
+                <a href="#contact">CONTACT</a>
+                <a href="#about">ABOUT</a>
+            </div>
+            <div class="footer-credit">
+                H4G © 2026 | HARMONY FOR GENERATIVE ART<br>
+                Crafted with 🎵 and 🎨
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scroll to sections
+        function scrollToSection(id) {
+            const element = document.getElementById(id);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth' });
+            }
+        }
+
+        // Navigate to app
+        function goToApp() {
+            window.location.href = '/midi-to-image/index.html';
+        }
+
+        // Intersection Observer for reveal animation
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('active');
+                }
+            });
+        }, {
+            threshold: 0.1,
+            rootMargin: '0px 0px -100px 0px'
+        });
+
+        // Observe all reveal elements
+        document.querySelectorAll('.reveal').forEach(element => {
+            observer.observe(element);
+        });
+
+        // Add some interactive glow effect on mouse move
+        document.addEventListener('mousemove', (e) => {
+            const x = e.clientX / window.innerWidth;
+            const y = e.clientY / window.innerHeight;
+            
+            document.body.style.background = `
+                linear-gradient(
+                    ${135 + x * 30}deg,
+                    rgba(10, 14, 39, 0.95) 0%,
+                    rgba(26, 0, 51, ${0.5 + y * 0.2}) 100%
+                )
+            `;
+        });
+
+        // ASCII animation in hero
+        const asciiElements = document.querySelectorAll('.hero-ascii pre');
+        asciiElements.forEach(element => {
+            const text = element.textContent;
+            element.textContent = '';
+            let index = 0;
+
+            function typeAscii() {
+                if (index < text.length) {
+                    element.textContent += text[index];
+                    index++;
+                    setTimeout(typeAscii, 20);
+                }
+            }
+
+            // Start animation after a short delay
+            setTimeout(typeAscii, 500);
+        });
+    </script>
+</body>
+</html>

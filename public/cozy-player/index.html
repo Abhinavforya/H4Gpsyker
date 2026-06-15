@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cozy Music Player — Spotify</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="/cozy-player/cozy-player.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+  <!-- p5.js for visualizations -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.7.0/p5.min.js"></script>
+  <!-- Spotify Web Playback SDK -->
+  <script src="https://sdk.scdn.co/spotify-player.js"></script>
+</head>
+<body>
+  <div class="bg-orbs" aria-hidden="true">
+    <div class="orb orb-1"></div>
+    <div class="orb orb-2"></div>
+    <div class="orb orb-3"></div>
+  </div>
+
+  <div class="app-container">
+    <!-- Animated visual background -->
+    <div id="canvas-container" class="canvas-container"></div>
+    
+    <!-- Player Interface -->
+    <div class="player-shell">
+      <!-- Header with auth -->
+      <header class="player-header">
+        <div class="header-brand">
+          <div class="brand-icon">♫</div>
+          <div>
+            <p class="brand-kicker">Spotify Visual Player</p>
+            <h1 class="brand-name">Cozy Studio</h1>
+          </div>
+        </div>
+        <div class="header-actions">
+          <div id="auth-indicator" class="auth-indicator disconnected">
+            <span class="indicator-dot"></span>
+            <span class="indicator-text">Disconnected</span>
+          </div>
+          <button id="auth-btn" class="btn-auth">Connect Spotify</button>
+        </div>
+      </header>
+
+      <!-- Main Player Content -->
+      <main class="player-main">
+        <!-- Left Panel: Track Info & Controls -->
+        <section class="player-info">
+          <!-- Album Art -->
+          <div class="artwork-container">
+            <div id="album-art" class="album-art">
+              <div class="placeholder-art">
+                <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="50" cy="50" r="40" fill="none" stroke="currentColor" stroke-width="2"/>
+                  <circle cx="50" cy="50" r="15" fill="currentColor" opacity="0.6"/>
+                  <path d="M 30 50 A 20 20 0 0 1 70 50" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>
+                </svg>
+              </div>
+              <img id="album-image" src="" alt="Album Art" class="album-image">
+            </div>
+          </div>
+
+          <!-- Track Information -->
+          <div class="track-info-box">
+            <h2 id="track-name" class="track-name">Select a track</h2>
+            <p id="track-artist" class="track-artist">No artist</p>
+            <p id="track-album" class="track-album">No album</p>
+            
+            <!-- Audio Features Display -->
+            <div class="audio-features">
+              <div class="feature-item">
+                <span class="feature-label">Energy</span>
+                <div class="feature-bar">
+                  <div id="energy-bar" class="feature-fill"></div>
+                </div>
+              </div>
+              <div class="feature-item">
+                <span class="feature-label">Valence</span>
+                <div class="feature-bar">
+                  <div id="valence-bar" class="feature-fill"></div>
+                </div>
+              </div>
+              <div class="feature-item">
+                <span class="feature-label">Danceability</span>
+                <div class="feature-bar">
+                  <div id="danceability-bar" class="feature-fill"></div>
+                </div>
+              </div>
+              <div class="feature-item">
+                <span class="feature-label">Tempo</span>
+                <div class="feature-label-value" id="tempo-value">0 BPM</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Right Panel: Player Controls -->
+        <section class="player-controls">
+          <div id="status-panel" class="status-panel">
+            Connect Spotify, choose a playlist or recent track, then press play. Visuals react live from Spotify metadata and playback progress.
+          </div>
+
+          <div class="art-workflow-panel">
+            <div>
+              <div class="art-workflow-kicker">Auto Artwork</div>
+              <div id="art-workflow-status" class="art-workflow-status">Every fifth Spotify track saves a 20s MIDI/art capture.</div>
+            </div>
+            <button id="art-gallery-link" class="btn-gallery" type="button">Gallery</button>
+          </div>
+
+          <!-- Playback Progress -->
+          <div class="progress-section">
+            <div class="time-display">
+              <span id="current-time" class="time">0:00</span>
+              <span id="total-time" class="time">0:00</span>
+            </div>
+            <div id="progress-bar" class="progress-bar">
+              <div id="progress-fill" class="progress-fill"></div>
+              <input id="progress-input" type="range" min="0" max="100" value="0" class="progress-slider">
+            </div>
+          </div>
+
+          <!-- Main Controls -->
+          <div class="control-buttons">
+            <button id="btn-prev" class="btn-control btn-icon" title="Previous">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M6 6h2v12H6V6zm3.5 6l8.5 6V6l-8.5 6z"/>
+              </svg>
+            </button>
+            <button id="btn-play" class="btn-control btn-play" title="Play">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M8 5v14l11-7z"/>
+              </svg>
+            </button>
+            <button id="btn-next" class="btn-control btn-icon" title="Next">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M16 18h2V6h-2v12zm-11-7l8.5-6v12l-8.5-6z"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Volume Control -->
+          <div class="volume-section">
+            <label class="volume-label">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.26 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+              </svg>
+              <input id="volume-slider" type="range" min="0" max="100" value="70" class="volume-slider">
+            </label>
+          </div>
+
+          <!-- Device Selector -->
+          <div class="device-section">
+            <label for="device-select" class="device-label">Device</label>
+            <select id="device-select" class="device-select">
+              <option value="">Waiting for Spotify device...</option>
+            </select>
+            <p id="device-help" class="device-help">The browser player appears here after Spotify connects.</p>
+          </div>
+
+          <!-- Visual Mode Toggle -->
+          <div class="visual-mode-section">
+            <label for="visual-mode" class="visual-label">Visual Mode</label>
+            <select id="visual-mode" class="visual-select">
+              <option value="particles">Particles</option>
+              <option value="waves">Waves</option>
+              <option value="mandala">Mandala</option>
+              <option value="constellation">Constellation</option>
+              <option value="spectrum">Spectrum</option>
+              <option value="spiral">Spiral</option>
+              <option value="reactive">Reactive</option>
+              <option value="mood-biome">Mood Biome</option>
+              <option value="live-paint">Live MIDI Paint</option>
+              <option value="live-ascii">Live ASCII</option>
+            </select>
+          </div>
+
+          <!-- Settings -->
+          <div class="settings-section">
+            <button id="btn-settings" class="btn-settings" title="Settings">
+              <svg viewBox="0 0 24 24" fill="currentColor">
+                <path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l1.72-1.34c.15-.12.19-.34.1-.51l-1.63-2.83c-.12-.22-.38-.28-.59-.12l-2.03 1.59c-.42-.32-.9-.6-1.44-.79l-.31-2.54c-.04-.24-.24-.41-.49-.41h-3.26c-.25 0-.45.17-.49.41l-.31 2.54c-.54.18-1.02.47-1.44.79l-2.03-1.59c-.23-.16-.47-.1-.59.12L2.74 8.87c-.09.17-.05.39.1.51l1.72 1.34c-.05.3-.07.62-.07.94s.02.64.07.94l-1.72 1.34c-.15.12-.19.34-.1.51l1.63 2.83c.12.22.38.28.59.12l2.03-1.59c.42.32.9.6 1.44.79l.31 2.54c.05.24.24.41.49.41h3.26c.25 0 .45-.17.49-.41l.31-2.54c.54-.18 1.02-.47 1.44-.79l2.03 1.59c.23.16.47.1.59-.12l1.63-2.83c.09-.17.05-.39-.1-.51l-1.72-1.34zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Library / History -->
+          <section class="library-section">
+            <div class="library-header">
+              <h3 class="library-title">Your Library</h3>
+              <p class="library-subtitle">Tap a playlist to inspect it, or play any track directly.</p>
+            </div>
+
+            <div class="library-grid">
+              <div class="library-column">
+                <h4 class="library-column-title">Playlists</h4>
+                <div id="playlist-list" class="library-list empty-state">Connect Spotify to load playlists.</div>
+              </div>
+
+              <div class="library-column">
+                <h4 class="library-column-title">Recently Played</h4>
+                <div id="recent-track-list" class="library-list empty-state">Recently played tracks will appear here.</div>
+              </div>
+
+              <div class="library-column library-column-wide">
+                <h4 class="library-column-title">Selected Playlist Tracks</h4>
+                <div id="playlist-track-list" class="library-list empty-state">Choose a playlist to see tracks.</div>
+              </div>
+            </div>
+          </section>
+        </section>
+      </main>
+
+      <!-- Footer -->
+      <footer class="player-footer">
+        <p class="footer-text">Playing on Spotify • Live visual art powered by track metadata</p>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/cozy-player/cozy-visual-engine.js"></script>
+  <script src="/cozy-player/cozy-player-controller.js"></script>
+</body>
+</html>

@@ -1,0 +1,40 @@
+{
+  "id": "1777767209753-widerstehe-doch-der-s-nde-bwv-54-transcr-by-v-kingur-lafsson-f7c84a",
+  "folderName": "2026-05-03-widerstehe-doch-der-s-nde-bwv-54-transcr-by-v-kingur-lafsson-",
+  "createdAt": "2026-05-03T00:13:29.753Z",
+  "triggerEvery": 5,
+  "playedCount": 5,
+  "captureSeconds": 20,
+  "track": {
+    "id": "5xVcnhVL0AwcOgbpuxTu6W",
+    "uri": "spotify:track:5xVcnhVL0AwcOgbpuxTu6W",
+    "name": "Widerstehe doch der Sünde, BWV 54 (Transcr. by Víkingur Ólafsson)",
+    "artists": "Johann Sebastian Bach, Víkingur Ólafsson",
+    "album": "Johann Sebastian Bach",
+    "duration_ms": 266213,
+    "image": "https://i.scdn.co/image/ab67616d0000b273369f6761d1cccba9a34f05cf",
+    "popularity": 50
+  },
+  "features": {
+    "tempo": 120,
+    "energy": 0.55,
+    "valence": 0.5,
+    "danceability": 0.52,
+    "acousticness": 0.24,
+    "instrumentalness": 0.08,
+    "liveness": 0.35,
+    "speechiness": 0.08,
+    "loudness": -8
+  },
+  "files": {
+    "metadata": "/generated-artworks/2026-05-03-widerstehe-doch-der-s-nde-bwv-54-transcr-by-v-kingur-lafsson-/metadata.json",
+    "midiFile": "/generated-artworks/2026-05-03-widerstehe-doch-der-s-nde-bwv-54-transcr-by-v-kingur-lafsson-/capture.mid",
+    "midi": "/generated-artworks/2026-05-03-widerstehe-doch-der-s-nde-bwv-54-transcr-by-v-kingur-lafsson-/midi.json",
+    "ascii": "/generated-artworks/2026-05-03-widerstehe-doch-der-s-nde-bwv-54-transcr-by-v-kingur-lafsson-/ascii.txt",
+    "svg": "/generated-artworks/2026-05-03-widerstehe-doch-der-s-nde-bwv-54-transcr-by-v-kingur-lafsson-/art.svg"
+  },
+  "noteCount": 39,
+  "bpm": 120,
+  "duration": 20,
+  "note": "Automatic Spotify SDK captures are metadata/audio-feature MIDI representations. Use Live Capture with tab/system audio for raw recorded audio."
+}

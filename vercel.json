@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "rewrites": [
+    { "source": "/auth/:path*", "destination": "/api/server" },
+    { "source": "/api/spotify/:path*", "destination": "/api/server" },
+    { "source": "/api/audio-features/:path*", "destination": "/api/server" },
+    { "source": "/api/artworks/:path*", "destination": "/api/server" },
+    { "source": "/artworks", "destination": "/api/server" },
+    { "source": "/artworks/", "destination": "/api/server" }
+  ]
+}

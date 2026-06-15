@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720">
+  <rect width="1200" height="720" fill="#08111f"/>
+  <rect x="28" y="28" width="1144" height="664" rx="24" fill="none" stroke="#ffffff" stroke-opacity="0.11"/>
+  <g filter="url(#glow)">
+    <circle cx="60" cy="305" r="23.06" fill="#e2e8f0" fill-opacity="0.81"/>
+    <line x1="60" y1="305" x2="88" y2="267" stroke="#f472b6" stroke-opacity="0.18" stroke-width="1"/><circle cx="88" cy="267" r="20.63" fill="#f472b6" fill-opacity="0.75"/>
+    <line x1="88" y1="267" x2="116" y2="335" stroke="#34d399" stroke-opacity="0.18" stroke-width="1"/><circle cx="116" cy="335" r="20.63" fill="#34d399" fill-opacity="0.75"/>
+    <line x1="116" y1="335" x2="144" y2="318" stroke="#a78bfa" stroke-opacity="0.18" stroke-width="1"/><circle cx="144" cy="318" r="20.63" fill="#a78bfa" fill-opacity="0.75"/>
+    <line x1="144" y1="318" x2="172" y2="293" stroke="#34d399" stroke-opacity="0.18" stroke-width="1"/><circle cx="172" cy="293" r="20.63" fill="#34d399" fill-opacity="0.75"/>
+    <line x1="172" y1="293" x2="200" y2="284" stroke="#e2e8f0" stroke-opacity="0.18" stroke-width="1"/><circle cx="200" cy="284" r="23.06" fill="#e2e8f0" fill-opacity="0.81"/>
+    <line x1="200" y1="284" x2="228" y2="382" stroke="#a78bfa" stroke-opacity="0.18" stroke-width="1"/><circle cx="228" cy="382" r="20.63" fill="#a78bfa" fill-opacity="0.75"/>
+    <line x1="228" y1="382" x2="256" y2="284" stroke="#e2e8f0" stroke-opacity="0.18" stroke-width="1"/><circle cx="256" cy="284" r="20.63" fill="#e2e8f0" fill-opacity="0.75"/>
+    <line x1="256" y1="284" x2="284" y2="301" stroke="#60a5fa" stroke-opacity="0.18" stroke-width="1"/><circle cx="284" cy="301" r="20.63" fill="#60a5fa" fill-opacity="0.75"/>
+    <line x1="284" y1="301" x2="312" y2="310" stroke="#f472b6" stroke-opacity="0.18" stroke-width="1"/><circle cx="312" cy="310" r="20.63" fill="#f472b6" fill-opacity="0.75"/>
+    <line x1="312" y1="310" x2="340" y2="288" stroke="#f472b6" stroke-opacity="0.18" stroke-width="1"/><circle cx="340" cy="288" r="23.06" fill="#f472b6" fill-opacity="0.81"/>
+    <line x1="340" y1="288" x2="367" y2="297" stroke="#a78bfa" stroke-opacity="0.18" stroke-width="1"/><circle cx="367" cy="297" r="20.63" fill="#a78bfa" fill-opacity="0.75"/>
+    <line x1="367" y1="297" x2="395" y2="361" stroke="#a78bfa" stroke-opacity="0.18" stroke-width="1"/><circle cx="395" cy="361" r="20.63" fill="#a78bfa" fill-opacity="0.75"/>
+    <line x1="395" y1="361" x2="423" y2="288" stroke="#f472b6" stroke-opacity="0.18" stroke-width="1"/><circle cx="423" cy="288" r="20.63" fill="#f472b6" fill-opacity="0.75"/>
+    <line x1="423" y1="288" x2="451" y2="305" stroke="#e2e8f0" stroke-opacity="0.18" stroke-width="1"/><circle cx="451" cy="305" r="20.63" fill="#e2e8f0" fill-opacity="0.75"/>
+    <line x1="451" y1="305" x2="479" y2="352" stroke="#f472b6" stroke-opacity="0.18" stroke-width="1"/><circle cx="479" cy="352" r="23.06" fill="#f472b6" fill-opacity="0.81"/>
+    <line x1="479" y1="352" x2="507" y2="335" stroke="#34d399" stroke-opacity="0.18" stroke-width="1"/><circle cx="507" cy="335" r="20.63" fill="#34d399" fill-opacity="0.75"/>
+    <line x1="507" y1="335" x2="535" y2="344" stroke="#60a5fa" stroke-opacity="0.18" stroke-width="1"/><circle cx="535" cy="344" r="20.63" fill="#60a5fa" fill-opacity="0.75"/>
+    <line x1="535" y1="344" x2="563" y2="318" stroke="#a78bfa" stroke-opacity="0.18" stroke-width="1"/><circle cx="563" cy="318" r="20.63" fill="#a78bfa" fill-opacity="0.75"/>
+    <line x1="563" y1="318" x2="591" y2="276" stroke="#a78bfa" stroke-opacity="0.18" stroke-width="1"/><circle cx="591" cy="276" r="20.63" fill="#a78bfa" fill-opacity="0.75"/>
+    <line x1="591" y1="276" x2="619" y2="365" stroke="#60a5fa" stroke-opacity="0.18" stroke-width="1"/><circle cx="619" cy="365" r="23.06" fill="#60a5fa" fill-opacity="0.81"/>
+    <line x1="619" y1="365" x2="647" y2="318" stroke="#a78bfa" stroke-opacity="0.18" stroke-width="1"/><circle cx="647" cy="318" r="20.63" fill="#a78bfa" fill-opacity="0.75"/>
+    <line x1="647" y1="318" x2="675" y2="356" stroke="#34d399" stroke-opacity="0.18" stroke-width="1"/><circle cx="675" cy="356" r="20.63" fill="#34d399" fill-opacity="0.75"/>
+    <line x1="675" y1="356" x2="703" y2="335" stroke="#34d399" stroke-opacity="0.18" stroke-width="1"/><circle cx="703" cy="335" r="20.63" fill="#34d399" fill-opacity="0.75"/>
+    <line x1="703" y1="335" x2="731" y2="310" stroke="#f472b6" stroke-opacity="0.18" stroke-width="1"/><circle cx="731" cy="310" r="20.63" fill="#f472b6" fill-opacity="0.75"/>
+    <line x1="731" y1="310" x2="759" y2="271" stroke="#34d399" stroke-opacity="0.18" stroke-width="1"/><circle cx="759" cy="271" r="23.06" fill="#34d399" fill-opacity="0.81"/>
+    <line x1="759" y1="271" x2="787" y2="356" stroke="#34d399" stroke-opacity="0.18" stroke-width="1"/><circle cx="787" cy="356" r="20.63" fill="#34d399" fill-opacity="0.75"/>
+    <line x1="787" y1="356" x2="815" y2="322" stroke="#60a5fa" stroke-opacity="0.18" stroke-width="1"/><circle cx="815" cy="322" r="20.63" fill="#60a5fa" fill-opacity="0.75"/>
+    <line x1="815" y1="322" x2="843" y2="305" stroke="#e2e8f0" stroke-opacity="0.18" stroke-width="1"/><circle cx="843" cy="305" r="20.63" fill="#e2e8f0" fill-opacity="0.75"/>
+    <line x1="843" y1="305" x2="871" y2="288" stroke="#f472b6" stroke-opacity="0.18" stroke-width="1"/><circle cx="871" cy="288" r="20.63" fill="#f472b6" fill-opacity="0.75"/>
+    <line x1="871" y1="288" x2="899" y2="382" stroke="#a78bfa" stroke-opacity="0.18" stroke-width="1"/><circle cx="899" cy="382" r="23.06" fill="#a78bfa" fill-opacity="0.81"/>
+    <line x1="899" y1="382" x2="927" y2="352" stroke="#f472b6" stroke-opacity="0.18" stroke-width="1"/><circle cx="927" cy="352" r="20.63" fill="#f472b6" fill-opacity="0.75"/>
+    <line x1="927" y1="352" x2="955" y2="318" stroke="#a78bfa" stroke-opacity="0.18" stroke-width="1"/><circle cx="955" cy="318" r="20.63" fill="#a78bfa" fill-opacity="0.75"/>
+    <line x1="955" y1="318" x2="982" y2="314" stroke="#34d399" stroke-opacity="0.18" stroke-width="1"/><circle cx="982" cy="314" r="20.63" fill="#34d399" fill-opacity="0.75"/>
+    <line x1="982" y1="314" x2="1010" y2="378" stroke="#34d399" stroke-opacity="0.18" stroke-width="1"/><circle cx="1010" cy="378" r="20.63" fill="#34d399" fill-opacity="0.75"/>
+    <line x1="1010" y1="378" x2="1038" y2="378" stroke="#34d399" stroke-opacity="0.18" stroke-width="1"/><circle cx="1038" cy="378" r="23.06" fill="#34d399" fill-opacity="0.81"/>
+    <line x1="1038" y1="378" x2="1066" y2="361" stroke="#a78bfa" stroke-opacity="0.18" stroke-width="1"/><circle cx="1066" cy="361" r="20.63" fill="#a78bfa" fill-opacity="0.75"/>
+    <line x1="1066" y1="361" x2="1094" y2="284" stroke="#e2e8f0" stroke-opacity="0.18" stroke-width="1"/><circle cx="1094" cy="284" r="20.63" fill="#e2e8f0" fill-opacity="0.75"/>
+    <line x1="1094" y1="284" x2="1122" y2="369" stroke="#e2e8f0" stroke-opacity="0.18" stroke-width="1"/><circle cx="1122" cy="369" r="20.63" fill="#e2e8f0" fill-opacity="0.75"/>
+  </g>
+  <text x="60" y="648" fill="#e2e8f0" font-family="Inter, Arial, sans-serif" font-size="34" font-weight="700">Widerstehe doch der Sünde, BWV 54 (Transcr. by Víkingur Ólafsson)</text>
+  <text x="60" y="682" fill="#94a3b8" font-family="Inter, Arial, sans-serif" font-size="18">Johann Sebastian Bach, Víkingur Ólafsson · 20s / every fifth Spotify track</text>
+  <defs>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+</svg>
