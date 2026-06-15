@@ -43,27 +43,54 @@ cd ~/apps
 git clone <your-repo-url> ascii-framer
 cd ascii-framer
 
+# Confirm this is the real app, not the hello-ec2 demo.
+ls
+```
+
+You should see `backend`, `ascii-framer`, and `docker-compose.prod.yml`. If you only see `index.js` and a small Express app that says "Hello from EC2!", you are in the demo project and S3 uploads will not work.
+
+Stop the demo container if it is running:
+
+```bash
+docker stop hello-ec2
+```
+
+Create the production environment file:
+
+```bash
+
 # Configure upload storage. Do not add AWS access keys on EC2.
 cat > .env <<'EOF'
-AWS_REGION=us-east-1
-S3_UPLOAD_BUCKET=your-upload-bucket
+AWS_REGION=ap-southeast-2
+S3_UPLOAD_BUCKET=new.nv
 S3_UPLOAD_PREFIX=ascii-framer/uploads
 S3_PUBLIC_BASE_URL=
 EOF
 
 # Start services
-docker-compose up -d
+docker-compose -f docker-compose.prod.yml up -d --build
 
 # Check status
-docker-compose ps
+docker-compose -f docker-compose.prod.yml ps
 
 # View logs
-docker-compose logs -f
+docker-compose -f docker-compose.prod.yml logs -f backend
 ```
 
 ## Step 3a: S3 Upload Permissions
 
 Attach an IAM role to the EC2 instance with permission to write uploaded files to the S3 bucket. The backend uses the AWS SDK default credential chain, so Amazon Linux/EC2 should use the instance profile instead of API keys.
+
+Simple setup:
+
+1. Open AWS Console -> IAM -> Roles -> Create role.
+2. Select trusted entity: AWS service.
+3. Select use case: EC2.
+4. Attach the S3 policy below.
+5. Open AWS Console -> EC2 -> Instances.
+6. Select the app instance.
+7. Actions -> Security -> Modify IAM role.
+8. Choose the new IAM role.
 
 Profile files are stored under `ascii-framer/uploads/users/<profile-id>/` with `audio/`, `art/`, and `metadata/` folders.
 
@@ -76,7 +103,7 @@ Minimum policy for profile uploads and gallery loading:
     {
       "Effect": "Allow",
       "Action": ["s3:ListBucket"],
-      "Resource": "arn:aws:s3:::your-upload-bucket",
+      "Resource": "arn:aws:s3:::new.nv",
       "Condition": {
         "StringLike": {
           "s3:prefix": ["ascii-framer/uploads/users/*"]
@@ -86,11 +113,37 @@ Minimum policy for profile uploads and gallery loading:
     {
       "Effect": "Allow",
       "Action": ["s3:PutObject", "s3:GetObject"],
-      "Resource": "arn:aws:s3:::your-upload-bucket/ascii-framer/uploads/*"
+      "Resource": "arn:aws:s3:::new.nv/ascii-framer/uploads/*"
     }
   ]
 }
 ```
+
+After starting the backend, check the logs:
+
+```bash
+docker logs -f ascii-framer-backend
+```
+
+Expected message:
+
+```text
+S3 uploads enabled: s3://new.nv/ascii-framer/uploads
+AWS credentials: using the default AWS SDK provider chain
+```
+
+Upload a file in the app, then check this S3 location:
+
+```text
+s3://new.nv/ascii-framer/uploads/users/
+```
+
+Common issues:
+
+- `Missing S3_UPLOAD_BUCKET environment variable`: the `.env` file is missing `S3_UPLOAD_BUCKET=new.nv`.
+- `AccessDenied`: the EC2 IAM role is missing the S3 policy or is not attached to the instance.
+- `NoSuchBucket`: the bucket name is wrong.
+- Region errors: keep `AWS_REGION=ap-southeast-2` for the Sydney bucket.
 
 If the backend runs in Docker and logs show missing AWS credentials, update the EC2 instance metadata options so `HttpPutResponseHopLimit` is `2`. This allows containers on the bridge network to reach the instance profile metadata service.
 
